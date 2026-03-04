@@ -38,13 +38,20 @@ void GameServer::tcp_start()
         {
             delete client;
         } else {
+            int num_clients = 0;
             {
                 std::lock_guard<std::mutex> lock(m_clients_mutex);
+                num_clients = m_clients.size();
                 m_clients.push_back(client);
             }
             std::cout << "New client connected: "
                 << client->getRemoteAddress()
                 << std::endl;
+            {
+                status = client->send(&num_clients, 4);
+                if (status != sf::Socket::Status::Done)
+                    std::cerr << "Could not send ID to client" << num_clients << std::endl;
+            }
             std::thread(&GameServer::handle_client, this, client).detach();
         }
     }
@@ -113,9 +120,9 @@ void GameServer::handle_client(sf::TcpSocket* client)
                 std::string message(payload);
                 std::cout << "Received message: " << message << std::endl;
 
-                std::string response = "Server received: " + message + "\n";
+                //std::string response = "Server received: " + message + "\n"; // Used for Multiplayer Pong
 
-                client->send(response.c_str(), response.size());
+                //client->send(response.c_str(), response.size()); // Used for Multiplayer Pong
 
                 broadcast_message(message, client);
             }
