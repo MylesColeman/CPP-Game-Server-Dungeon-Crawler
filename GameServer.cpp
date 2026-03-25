@@ -3,6 +3,7 @@
 #include <iostream>
 #include <thread>
 #include "GameServer.h"
+#include "GameMessage.h"
 
 // Note: This is compiled with SFML 2.6.2 in mind.
 // It would work similarly with slightly older versions of SFML.
@@ -119,6 +120,15 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client)
             if (received > 0) 
             {
                 std::vector<uint8_t> message(payload, payload + received);
+
+                auto msg = GameMessageFactory::create(message);
+                if (msg && msg->type == GameMessageType::PLAYER_MOVE)
+                {
+                    auto move = static_cast<PlayerMoveMessage*>(msg.get());
+                    std::cout << "Relaying Move: Player " << move->id
+                                << " to (" << move->posX << ", " << move->posY << ")" << std::endl;
+                }
+
                 broadcast_message(message, client);
             }
         }
@@ -144,7 +154,7 @@ void GameServer::broadcast_message(const std::vector<uint8_t>& message, std::sha
         if (client != sender)
         {
             // SENDING
-            sf::Socket::Status status = client->send(message.data(), message.size()) ;
+            sf::Socket::Status status = client->send(message.data(), message.size());
             if (status != sf::Socket::Status::Done)
             {
                 std::cerr << "Error sending message to client" << std::endl;

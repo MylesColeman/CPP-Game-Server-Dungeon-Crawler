@@ -13,6 +13,10 @@ all: server
 server: $(OBJS)
 	$(CPP) $(CXXFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(CFLAGS)
 
+GameServer.o: GameServer.cpp GameServer.h GameMessage.h
+		$(CPP) $(CXXFLAGS) -c $< -o $@
+main.o: main.cpp GameServer.h
+		$(CPP) $(CXXFLAGS) -c $< -o $@
 %.o: %.cpp
 		$(CPP) $(CXXFLAGS) -c $< -o $@
 clean:
