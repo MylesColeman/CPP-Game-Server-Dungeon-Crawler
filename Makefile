@@ -10,7 +10,7 @@ OBJS=GameServer.o main.o
 
 all: server
 
-server: GameServer.o $(OBJS)
+server: $(OBJS)
 	$(CPP) $(CXXFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(CFLAGS)
 
 %.o: %.cpp

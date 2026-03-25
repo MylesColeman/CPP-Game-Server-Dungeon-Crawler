@@ -5,6 +5,7 @@
 #include <vector>
 #include <mutex>
 #include <string>
+#include <memory>
 
 class GameServer {
 public:
@@ -14,11 +15,11 @@ public:
 private:
     unsigned short m_tcp_port;
     unsigned short m_udp_port;
-    std::vector<sf::TcpSocket*> m_clients;
+    std::vector<std::shared_ptr<sf::TcpSocket>> m_clients;
     std::mutex m_clients_mutex;
 
-    void handle_client(sf::TcpSocket* client);
-    void broadcast_message(const std::string& message, sf::TcpSocket* sender);
+    void handle_client(std::shared_ptr<sf::TcpSocket> client);
+    void broadcast_message(const std::vector<uint8_t>& message, std::shared_ptr<sf::TcpSocket> sender);
 };
 
 #endif

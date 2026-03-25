@@ -32,12 +32,10 @@ void GameServer::tcp_start()
     while (true)
     {
         // ACCEPTING
-        sf::TcpSocket* client = new sf::TcpSocket;
+        auto client = std::make_shared<sf::TcpSocket>();
         status = listener.accept(*client);
-        if (status != sf::Socket::Status::Done)
+        if (status == sf::Socket::Status::Done)
         {
-            delete client;
-        } else {
             int num_clients = 0;
             {
                 std::lock_guard<std::mutex> lock(m_clients_mutex);
@@ -48,7 +46,7 @@ void GameServer::tcp_start()
                 << client->getRemoteAddress()
                 << std::endl;
             {
-                status = client->send(&num_clients, 4);
+                status = client->send(&num_clients, sizeof(int));
                 if (status != sf::Socket::Status::Done)
                     std::cerr << "Could not send ID to client" << num_clients << std::endl;
             }
@@ -102,40 +100,35 @@ void GameServer::udp_start()
 
 // Loop around, receive messages from client and send them to all
 // the other connected clients.
-void GameServer::handle_client(sf::TcpSocket* client)
+void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client)
 {
+    // RECEIVING
+    uint8_t payload[1024];
+    size_t received;
     while (true)
         {
-            // RECEIVING
-            char payload[1024];
             memset(payload, 0, 1024);
-            size_t received;
-            sf::Socket::Status status = client->receive(payload, 1024, received);
-            if (status != sf::Socket::Status::Done)
+            
+            sf::Socket::Status status = client->receive(payload, sizeof(payload), received);
+            if (status == sf::Socket::Disconnected || status == sf::Socket::Error)
             {
-                std::cerr << "Error receiving message from client" << std::endl;
+                std::cerr << "Client Disconnected!" << std::endl;
                 break;
-            } else {
-                // Actually, there is no need to print the message if the message is not a string
-                std::string message(payload);
-                std::cout << "Received message: " << message << std::endl;
-
+            } 
+            
+            if (received > 0) 
+            {
+                std::vector<uint8_t> message(payload, payload + received);
                 broadcast_message(message, client);
             }
         }
 
-        // Everything that follows only makes sense if we have a graceful way to exiting the loop.
-        // Remove the client from the list when done
-        {
-            std::lock_guard<std::mutex> lock(m_clients_mutex);
-            m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), client),
-                    m_clients.end());
-        }
-        delete client;
+        std::lock_guard<std::mutex> lock(m_clients_mutex);
+        m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), client), m_clients.end());
 }
 
 // Sends `message` from `sender` to all the other connected clients
-void GameServer::broadcast_message(const std::string& message, sf::TcpSocket* sender)
+void GameServer::broadcast_message(const std::vector<uint8_t>& message, std::shared_ptr<sf::TcpSocket> sender)
 {
     // You might want to validate the message before you send it.
     // A few reasons for that:
@@ -151,7 +144,7 @@ void GameServer::broadcast_message(const std::string& message, sf::TcpSocket* se
         if (client != sender)
         {
             // SENDING
-            sf::Socket::Status status = client->send(message.c_str(), message.size() + 1) ;
+            sf::Socket::Status status = client->send(message.data(), message.size()) ;
             if (status != sf::Socket::Status::Done)
             {
                 std::cerr << "Error sending message to client" << std::endl;
