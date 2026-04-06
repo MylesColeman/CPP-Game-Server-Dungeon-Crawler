@@ -2,6 +2,7 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
+#include <cmath>
 #include "GameServer.h"
 #include "GameMessage.h"
 
@@ -37,21 +38,28 @@ void GameServer::tcp_start()
         status = listener.accept(*client);
         if (status == sf::Socket::Status::Done)
         {
-            int num_clients = 0;
+            int32_t assigned_id;
             {
                 std::lock_guard<std::mutex> lock(m_clients_mutex);
-                num_clients = m_clients.size();
+                assigned_id = m_next_id++;
                 m_clients.push_back(client);
             }
-            std::cout << "New client connected: "
-                << client->getRemoteAddress()
-                << std::endl;
+
             {
-                status = client->send(&num_clients, sizeof(int));
-                if (status != sf::Socket::Status::Done)
-                    std::cerr << "Could not send ID to client" << num_clients << std::endl;
+                std::lock_guard<std::mutex> state_lock(m_state_mutex);
+                PlayerState newState;
+                newState.position = sf::Vector2f(0.0f, 0.0f);
+                newState.type = EntityType::PLAYER;
+                m_entity_states[assigned_id] = newState;
             }
-            std::thread(&GameServer::handle_client, this, client).detach();
+
+            std::cout << "New client connected: " << client->getRemoteAddress() << std::endl;
+            status = client->send(&assigned_id, sizeof(int32_t));
+
+            if (status != sf::Socket::Status::Done)
+                std::cerr << "Could not send ID to client" << assigned_id << std::endl;
+
+            std::thread(&GameServer::handle_client, this, client, assigned_id).detach();
         }
     }
     // No need to call close of the listener.
@@ -101,40 +109,74 @@ void GameServer::udp_start()
 
 // Loop around, receive messages from client and send them to all
 // the other connected clients.
-void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client)
+void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my_id)
 {
     // RECEIVING
-    uint8_t payload[1024];
-    size_t received;
     while (true)
+    {
+        uint8_t type_byte;
+        size_t received;
+
+        sf::Socket::Status status = client->receive(&type_byte, 1, received);
+        if (status == sf::Socket::Disconnected || status == sf::Socket::Error) 
         {
-            memset(payload, 0, 1024);
-            
-            sf::Socket::Status status = client->receive(payload, sizeof(payload), received);
-            if (status == sf::Socket::Disconnected || status == sf::Socket::Error)
-            {
-                std::cerr << "Client Disconnected!" << std::endl;
-                break;
-            } 
-            
-            if (received > 0) 
-            {
-                std::vector<uint8_t> message(payload, payload + received);
-
-                auto msg = GameMessageFactory::create(message);
-                if (msg && msg->type == GameMessageType::PLAYER_MOVE)
-                {
-                    auto move = static_cast<PlayerMoveMessage*>(msg.get());
-                    std::cout << "Relaying Move: Player " << move->id
-                                << " to (" << move->posX << ", " << move->posY << ")" << std::endl;
-                }
-
-                broadcast_message(message, client);
-            }
+            std::cerr << "Client Disconnected!" << std::endl;
+            break;
         }
 
-        std::lock_guard<std::mutex> lock(m_clients_mutex);
-        m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), client), m_clients.end());
+        if (received == 1) 
+        {
+            GameMessageType type = static_cast<GameMessageType>(type_byte);
+            size_t remaining_size = 0;
+
+            if (type == GameMessageType::PLAYER_MOVE) 
+                remaining_size = 12; // 4 (id) + 4 (x) + 4 (y)
+            else if (type == GameMessageType::PLAYER_ATTACK) 
+                remaining_size = 4;  // 4 (id)
+            else 
+            {
+                std::cerr << "Unknown message type received: " << (int)type_byte << std::endl;
+                continue;
+            }
+
+            std::vector<uint8_t> full_packet(remaining_size + 1);
+            full_packet[0] = type_byte;
+
+            status = client->receive(&full_packet[1], remaining_size, received);
+
+            if (status == sf::Socket::Done) 
+            {
+                auto msg = GameMessageFactory::create(full_packet);
+
+                if (msg) 
+                {
+                    if (msg->type == GameMessageType::PLAYER_MOVE) 
+                    {
+                        auto move = static_cast<PlayerMoveMessage*>(msg.get());
+                        {
+                            std::lock_guard<std::mutex> state_lock(m_state_mutex);
+                            m_entity_states[move->id].position = sf::Vector2f(move->posX, move->posY);
+                        }
+                    }
+                    else if (msg->type == GameMessageType::PLAYER_ATTACK) 
+                    {
+                        auto attack = static_cast<PlayerAttackMessage*>(msg.get());
+                        process_attack(attack->id);
+                    }
+
+                    broadcast_message(full_packet, client);
+                }
+            }
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> state_lock(m_state_mutex);
+        m_entity_states.erase(my_id);
+    }
+
+    std::lock_guard<std::mutex> lock(m_clients_mutex);
+    m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), client), m_clients.end());
 }
 
 // Sends `message` from `sender` to all the other connected clients
@@ -160,5 +202,42 @@ void GameServer::broadcast_message(const std::vector<uint8_t>& message, std::sha
                 std::cerr << "Error sending message to client" << std::endl;
             }
         }
+    }
+}
+
+void GameServer::process_attack(int32_t attacker_id)
+{
+    std::lock_guard<std::mutex> lock(m_state_mutex);
+
+    auto it = m_entity_states.find(attacker_id);
+    if (it == m_entity_states.end()) return;
+
+    sf::Vector2f attacker_pos = it->second.position;
+    float attack_range = 2.0f;
+
+    std::cout << "Player " << attacker_id << " attacked at " << attacker_pos.x << ", " << attacker_pos.y << std::endl;
+
+    for (auto& pair : m_entity_states) 
+    {
+        if (pair.second.type == EntityType::PLAYER) continue;
+
+        int32_t target_id = pair.first;
+        if (target_id == attacker_id) continue;
+
+        sf::Vector2f target_pos = pair.second.position;
+
+        float dx = attacker_pos.x - target_pos.x;
+        float dy = attacker_pos.y - target_pos.y;
+        float distanceSquared = (dx * dx) + (dy * dy);
+        float rangeSquared = attack_range * attack_range;
+
+        if (distanceSquared <= rangeSquared)
+        {
+            std::cout << "HIT! Player " << target_id << " was in range." << std::endl;
+
+            // TODO: Broadcast an ENTITY_DAMAGED message
+        }
+        else
+            std::cout << "MISS: Player " << target_id << " was too far away." << std::endl;
     }
 }

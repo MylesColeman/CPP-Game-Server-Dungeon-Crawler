@@ -6,7 +6,11 @@
 #include <cstring>
 #include <memory>
 
-enum class GameMessageType : uint8_t { PLAYER_MOVE = 1 };
+enum class GameMessageType : uint8_t 
+{
+    PLAYER_MOVE = 1, 
+    PLAYER_ATTACK = 2
+};
 
 class GameMessage {
     public:
@@ -24,6 +28,17 @@ class PlayerMoveMessage : public GameMessage
     {
         type = GameMessageType::PLAYER_MOVE;
         id = _id; posX = _x; posY = _y;
+    }
+};
+
+class PlayerAttackMessage : public GameMessage 
+{
+    public:
+    int32_t id;
+
+    PlayerAttackMessage(int32_t _id) {
+        type = GameMessageType::PLAYER_ATTACK;
+        id = _id;
     }
 };
 
@@ -46,6 +61,13 @@ class GameMessageFactory
             std::memcpy(&y, &bytes[9], 4);
             return std::make_unique<PlayerMoveMessage>(id, x, y);
         }
+
+        if (type == GameMessageType::PLAYER_ATTACK && bytes.size() >= 5) {
+            int32_t id;
+            std::memcpy(&id, &bytes[1], 4);
+            return std::make_unique<PlayerAttackMessage>(id);
+        }
+
         return nullptr;
     }
 };
