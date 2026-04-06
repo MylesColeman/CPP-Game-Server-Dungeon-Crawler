@@ -11,7 +11,10 @@
 // A thourough rework is necessary for SFML 3.0.
 
 GameServer::GameServer(unsigned short tcp_port, unsigned short udp_port) :
-    m_tcp_port(tcp_port), m_udp_port(udp_port) {}
+    m_tcp_port(tcp_port), m_udp_port(udp_port) 
+{
+    std::thread(&GameServer::simulation_loop, this).detach();
+}
 
 // Binds to a port and then loops around.  For every client that connects,
 // we start a new thread receiving their messages.
@@ -107,6 +110,40 @@ void GameServer::udp_start()
     std::cout << "Server stopped" << std::endl;
 }
 
+void GameServer::simulation_loop()
+{
+    auto tick_duration = std::chrono::milliseconds(16);
+
+    while (m_running) {
+        auto start_time = std::chrono::steady_clock::now();
+
+        {
+            std::lock_guard<std::mutex> lock(m_state_mutex);
+
+            WorldSnapshot snap;
+            snap.timestamp = start_time;
+
+            for (auto const& pair : m_entity_states)
+            {
+                int32_t id = pair.first;
+                const PlayerState& state = pair.second;
+                snap.positions[id] = state.position;
+            }
+
+            m_history.push_back(snap);
+
+            if (m_history.size() > MAX_HISTORY) 
+                m_history.pop_front();
+        }
+
+        auto end_time = std::chrono::steady_clock::now();
+        auto elapsed = end_time - start_time;
+        if (elapsed < tick_duration) {
+            std::this_thread::sleep_for(tick_duration - elapsed);
+        }
+    }
+}
+
 // Loop around, receive messages from client and send them to all
 // the other connected clients.
 void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my_id)
@@ -163,6 +200,20 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                     {
                         auto attack = static_cast<PlayerAttackMessage*>(msg.get());
                         process_attack(attack->id);
+                    }
+                    else if (msg->type == GameMessageType::MAP_DATA)
+                    {
+                        auto mapMsg = static_cast<MapDataMessage*>(msg.get());
+                        {
+                            std::lock_guard<std::mutex> state_lock(m_state_mutex);
+                            m_current_map.width = mapMsg->width;
+                            m_current_map.height = mapMsg->height;
+                            m_current_map.collision.clear();
+                            for (uint8_t b : mapMsg->grid) {
+                                m_current_map.collision.push_back(b == 1);
+                            }
+                        }
+                        std::cout << "Server received Map Data: " << mapMsg->width << "x" << mapMsg->height << std::endl;
                     }
 
                     broadcast_message(full_packet, client);
