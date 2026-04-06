@@ -17,6 +17,7 @@ struct PlayerState
 {
     sf::Vector2f position;
     EntityType type;
+    sf::Clock attackTimer;
 };
 
 class GameServer 

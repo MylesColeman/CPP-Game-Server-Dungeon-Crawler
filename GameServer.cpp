@@ -57,7 +57,7 @@ void GameServer::tcp_start()
             status = client->send(&assigned_id, sizeof(int32_t));
 
             if (status != sf::Socket::Status::Done)
-                std::cerr << "Could not send ID to client" << assigned_id << std::endl;
+                std::cerr << "Could not send ID to client " << assigned_id << std::endl;
 
             std::thread(&GameServer::handle_client, this, client, assigned_id).detach();
         }
@@ -157,6 +157,7 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                             std::lock_guard<std::mutex> state_lock(m_state_mutex);
                             m_entity_states[move->id].position = sf::Vector2f(move->posX, move->posY);
                         }
+                        std::cout << "Relaying Move: Player " << move->id << " to " << move->posX << ", " << move->posY << std::endl;
                     }
                     else if (msg->type == GameMessageType::PLAYER_ATTACK) 
                     {
@@ -211,6 +212,10 @@ void GameServer::process_attack(int32_t attacker_id)
 
     auto it = m_entity_states.find(attacker_id);
     if (it == m_entity_states.end()) return;
+
+    if (it->second.attackTimer.getElapsedTime().asSeconds() < 0.5f) return;
+
+    it->second.attackTimer.restart();
 
     sf::Vector2f attacker_pos = it->second.position;
     float attack_range = 2.0f;
