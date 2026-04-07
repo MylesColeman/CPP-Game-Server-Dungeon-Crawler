@@ -206,10 +206,12 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                 remaining_size = 12; // 4 (id) + 4 (x) + 4 (y)
             else if (type == GameMessageType::PLAYER_ATTACK) 
                 remaining_size = 4;  // 4 (id)
+            else if (type == GameMessageType::MAP_DATA)
+                remaining_size = 220; // 20 * 11 grid
             else 
             {
                 std::cerr << "Unknown message type received: " << (int)type_byte << std::endl;
-                continue;
+                break;
             }
 
             std::vector<uint8_t> full_packet(remaining_size + 1);
@@ -229,22 +231,30 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                         {
                             std::lock_guard<std::mutex> state_lock(m_state_mutex);
 
-                            sf::Vector2f startPos = m_entity_states[move->id].position;
-
-                            auto truePath = Pathfinding::findPath
-                            ((int)startPos.x, (int)startPos.y, 
-                                (int)move->posX, (int)move->posY, 
-                                m_current_map.collision, 
-                                m_current_map.width, m_current_map.height);
-
-                            if (!truePath.empty()) 
+                            // If position is 0, 0; this is the first move message so set their position directly without pathfinding
+                            if (m_entity_states[move->id].position.x == 0.0f && m_entity_states[move->id].position.y == 0.0f)
                             {
-                                m_entity_states[move->id].currentPath = truePath;
-                                m_entity_states[move->id].isMoving = true;
-                                std::cout << "Path found for Player " << move->id << " (" << truePath.size() << " nodes)" << std::endl;
+                                m_entity_states[move->id].position = sf::Vector2f(move->posX, move->posY);
+                                std::cout << "Initial sync: Player " << move->id << " teleported to " << move->posX << ", " << move->posY << std::endl;
                             }
                             else
-                                std::cout << "Invalid path requested by Player " << move->id << std::endl;
+                            {
+                                // Standard pathfinding for subsequent moves
+                                sf::Vector2f startPos = m_entity_states[move->id].position;
+                                auto truePath = Pathfinding::findPath
+                                ((int)startPos.x, (int)startPos.y,
+                                    (int)move->posX, (int)move->posY,
+                                    m_current_map.collision,
+                                    m_current_map.width, m_current_map.height);
+
+                                if (!truePath.empty()) 
+                                {
+                                    m_entity_states[move->id].currentPath = truePath;
+                                    m_entity_states[move->id].isMoving = true;
+                                }
+                                else
+                                    std::cout << "Invalid path requested by Player " << move->id << std::endl;
+                            }
                         }
                         std::cout << "Relaying Move: Player " << move->id << " to " << move->posX << ", " << move->posY << std::endl;
                     }
