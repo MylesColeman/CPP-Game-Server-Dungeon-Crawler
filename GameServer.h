@@ -8,6 +8,7 @@
 #include <memory>
 #include <chrono>
 #include <deque>
+#include "Pathfinding.h"
 
 struct WorldSnapshot 
 {
@@ -30,6 +31,9 @@ enum class EntityType
 struct PlayerState 
 {
     sf::Vector2f position;
+    std::vector<sf::Vector2f> currentPath;
+    bool isMoving = false;
+    float speed = 5.f / 60.f;
     EntityType type;
     sf::Clock attackTimer;
 };

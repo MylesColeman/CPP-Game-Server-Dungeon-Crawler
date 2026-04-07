@@ -113,12 +113,49 @@ void GameServer::udp_start()
 void GameServer::simulation_loop()
 {
     auto tick_duration = std::chrono::milliseconds(16);
+    int tick_count = 0;
 
     while (m_running) {
         auto start_time = std::chrono::steady_clock::now();
 
         {
             std::lock_guard<std::mutex> lock(m_state_mutex);
+
+            for (auto& pair : m_entity_states)
+            {
+                PlayerState& state = pair.second;
+
+                if (state.isMoving && !state.currentPath.empty())
+                {
+                    sf::Vector2f target = state.currentPath.front();
+                    sf::Vector2f direction = target - state.position;
+                    float distance = std::sqrt(direction.x * direction.x + direction.y * direction.y);
+
+                    if (distance <= state.speed)
+                    {
+                        state.position = target;
+                        state.currentPath.erase(state.currentPath.begin());
+
+                        if (state.currentPath.empty()) 
+                            state.isMoving = false;
+                    }
+                    else
+                        state.position += (direction / distance) * state.speed;
+                }
+            }
+
+            if (++tick_count >= 6) 
+            {
+                tick_count = 0;
+
+                WorldStateMessage worldMsg;
+                for (auto const& pair : m_entity_states) 
+                    worldMsg.positions[pair.first] = pair.second.position;
+
+                std::vector<uint8_t> bytes = worldMsg.serialise();
+
+                broadcast_message(bytes, nullptr);
+            }
 
             WorldSnapshot snap;
             snap.timestamp = start_time;
@@ -138,9 +175,8 @@ void GameServer::simulation_loop()
 
         auto end_time = std::chrono::steady_clock::now();
         auto elapsed = end_time - start_time;
-        if (elapsed < tick_duration) {
+        if (elapsed < tick_duration) 
             std::this_thread::sleep_for(tick_duration - elapsed);
-        }
     }
 }
 
@@ -192,7 +228,23 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                         auto move = static_cast<PlayerMoveMessage*>(msg.get());
                         {
                             std::lock_guard<std::mutex> state_lock(m_state_mutex);
-                            m_entity_states[move->id].position = sf::Vector2f(move->posX, move->posY);
+
+                            sf::Vector2f startPos = m_entity_states[move->id].position;
+
+                            auto truePath = Pathfinding::findPath
+                            ((int)startPos.x, (int)startPos.y, 
+                                (int)move->posX, (int)move->posY, 
+                                m_current_map.collision, 
+                                m_current_map.width, m_current_map.height);
+
+                            if (!truePath.empty()) 
+                            {
+                                m_entity_states[move->id].currentPath = truePath;
+                                m_entity_states[move->id].isMoving = true;
+                                std::cout << "Path found for Player " << move->id << " (" << truePath.size() << " nodes)" << std::endl;
+                            }
+                            else
+                                std::cout << "Invalid path requested by Player " << move->id << std::endl;
                         }
                         std::cout << "Relaying Move: Player " << move->id << " to " << move->posX << ", " << move->posY << std::endl;
                     }

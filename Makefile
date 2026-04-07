@@ -6,16 +6,18 @@ CPPFLAGS=
 LDLIBS=
 LIBS=
 CPP=g++
-OBJS=GameServer.o main.o
+OBJS=GameServer.o main.o Pathfinding.o
 
 all: server
 
 server: $(OBJS)
 	$(CPP) $(CXXFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(CFLAGS)
 
-GameServer.o: GameServer.cpp GameServer.h GameMessage.h
+GameServer.o: GameServer.cpp GameServer.h GameMessage.h Pathfinding.h
 		$(CPP) $(CXXFLAGS) -c $< -o $@
 main.o: main.cpp GameServer.h
+		$(CPP) $(CXXFLAGS) -c $< -o $@
+Pathfinding.o: Pathfinding.cpp Pathfinding.h
 		$(CPP) $(CXXFLAGS) -c $< -o $@
 %.o: %.cpp
 		$(CPP) $(CXXFLAGS) -c $< -o $@
