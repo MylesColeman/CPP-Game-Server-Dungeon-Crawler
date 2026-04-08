@@ -241,7 +241,13 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                             else
                             {
                                 // Standard pathfinding for subsequent moves
-                                sf::Vector2f startPos = m_entity_states[move->id].position;
+                                sf::Vector2f startPos;
+
+                                if (m_entity_states[move->id].isMoving && !m_entity_states[move->id].currentPath.empty()) 
+                                    startPos = m_entity_states[move->id].currentPath.front();
+                                else 
+                                    startPos = m_entity_states[move->id].position;
+
                                 std::cout << "SERVER A* START: (" << startPos.x << ", " << startPos.y << ") to (" << move->posX << ", " << move->posY << ")" << std::endl;
                                 
                                 std::vector<bool> dynamicCollision = m_current_map.collision;
