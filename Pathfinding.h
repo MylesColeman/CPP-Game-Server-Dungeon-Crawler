@@ -32,7 +32,9 @@ private:
 
     static float calculateManhattan(int x1, int y1, int x2, int y2) 
     {
-        return (std::abs(x1 - x2) + std::abs(y1 - y2)) * 1.001f;
+        float dx = std::abs(x1 - x2);
+        float dy = std::abs(y1 - y2);
+        return dx + dy + (dx * 0.001f);
     }
 
     static std::vector<sf::Vector2f> reconstructPath(Node* goalNode);

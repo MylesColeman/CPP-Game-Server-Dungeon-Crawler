@@ -53,6 +53,7 @@ void GameServer::tcp_start()
                 PlayerState newState;
                 newState.position = sf::Vector2f(0.0f, 0.0f);
                 newState.type = EntityType::PLAYER;
+                newState.speed = 5.0f;
                 m_entity_states[assigned_id] = newState;
             }
 
@@ -131,7 +132,7 @@ void GameServer::simulation_loop()
                     sf::Vector2f direction = target - state.position;
                     float distance = std::sqrt(direction.x * direction.x + direction.y * direction.y);
 
-                    if (distance <= state.speed)
+                    if (distance <= (state.speed * 0.016f))
                     {
                         state.position = target;
                         state.currentPath.erase(state.currentPath.begin());
@@ -140,7 +141,7 @@ void GameServer::simulation_loop()
                             state.isMoving = false;
                     }
                     else
-                        state.position += (direction / distance) * state.speed;
+                        state.position += (direction / distance) * (state.speed * 0.016f);
                 }
             }
 
@@ -241,10 +242,26 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                             {
                                 // Standard pathfinding for subsequent moves
                                 sf::Vector2f startPos = m_entity_states[move->id].position;
+                                std::cout << "SERVER A* START: (" << startPos.x << ", " << startPos.y << ") to (" << move->posX << ", " << move->posY << ")" << std::endl;
+                                
+                                std::vector<bool> dynamicCollision = m_current_map.collision;
+
+                                for (const auto& pair : m_entity_states)
+                                {
+                                    if (pair.first != move->id && pair.second.type == EntityType::PLAYER)
+                                    {
+                                        int px = static_cast<int>(pair.second.position.x);
+                                        int py = static_cast<int>(pair.second.position.y);
+
+                                        if (px >= 0 && px < m_current_map.width && py >= 0 && py < m_current_map.height)
+                                            dynamicCollision[py * m_current_map.width + px] = true;
+                                    }
+                                }
+
                                 auto truePath = Pathfinding::findPath
                                 ((int)startPos.x, (int)startPos.y,
                                     (int)move->posX, (int)move->posY,
-                                    m_current_map.collision,
+                                    dynamicCollision,
                                     m_current_map.width, m_current_map.height);
 
                                 if (!truePath.empty()) 
