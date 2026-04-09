@@ -38,11 +38,13 @@ class PlayerAttackMessage : public GameMessage
 {
     public:
         int32_t id;
+        uint32_t tick;
 
-        PlayerAttackMessage(int32_t _id) 
+        PlayerAttackMessage(int32_t _id, uint32_t _tick) 
         {
             type = GameMessageType::PLAYER_ATTACK;
             id = _id;
+            tick = _tick;
         }
 };
 
@@ -60,6 +62,7 @@ class MapDataMessage : public GameMessage
 class WorldStateMessage : public GameMessage
 {
 public:
+    uint32_t tick;
     std::map<int32_t, sf::Vector2f> positions;
 
     WorldStateMessage() { type = GameMessageType::WORLD_STATE; }
@@ -68,6 +71,10 @@ public:
     {
         std::vector<uint8_t> packet;
         packet.push_back(static_cast<uint8_t>(type));
+
+        uint8_t tickBytes[4];
+        std::memcpy(tickBytes, &tick, 4);
+        packet.insert(packet.end(), tickBytes, tickBytes + 4);
 
         uint32_t count = static_cast<uint32_t>(positions.size());
         uint8_t countBytes[4];
@@ -111,10 +118,12 @@ class GameMessageFactory
             return std::make_unique<PlayerMoveMessage>(id, x, y);
         }
 
-        if (type == GameMessageType::PLAYER_ATTACK && bytes.size() >= 5) {
+        if (type == GameMessageType::PLAYER_ATTACK && bytes.size() >= 9) {
             int32_t id;
+            uint32_t tick;
             std::memcpy(&id, &bytes[1], 4);
-            return std::make_unique<PlayerAttackMessage>(id);
+            std::memcpy(&tick, &bytes[5], 4);
+            return std::make_unique<PlayerAttackMessage>(id, tick);
         }
 
         if (type == GameMessageType::MAP_DATA && bytes.size() >= 221)
@@ -124,19 +133,23 @@ class GameMessageFactory
             return std::make_unique<MapDataMessage>(20, 11, grid);
         }
 
-        if (type == GameMessageType::WORLD_STATE && bytes.size() >= 5)
+        if (type == GameMessageType::WORLD_STATE && bytes.size() >= 9)
         {
+            uint32_t tick;
             uint32_t count;
-            std::memcpy(&count, &bytes[1], 4);
+            std::memcpy(&tick, &bytes[1], 4);
+            std::memcpy(&count, &bytes[5], 4);
 
-            if (bytes.size() < 5 + (count * 12)) return nullptr;
+            if (bytes.size() < 9 + (count * 12)) return nullptr;
 
             auto msg = std::make_unique<WorldStateMessage>();
+            msg->tick = tick;
+
             for (uint32_t i = 0; i < count; ++i) 
             {
                 int32_t id;
                 float x, y;
-                size_t offset = 5 + (i * 12);
+                size_t offset = 9 + (i * 12);
 
                 std::memcpy(&id, &bytes[offset], 4);
                 std::memcpy(&x, &bytes[offset + 4], 4);

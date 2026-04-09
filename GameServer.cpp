@@ -122,6 +122,8 @@ void GameServer::simulation_loop()
         {
             std::lock_guard<std::mutex> lock(m_state_mutex);
 
+            m_current_tick++;
+
             for (auto& pair : m_entity_states)
             {
                 PlayerState& state = pair.second;
@@ -150,6 +152,7 @@ void GameServer::simulation_loop()
                 tick_count = 0;
 
                 WorldStateMessage worldMsg;
+                worldMsg.tick = m_current_tick;
                 for (auto const& pair : m_entity_states) 
                     worldMsg.positions[pair.first] = pair.second.position;
 
@@ -159,7 +162,7 @@ void GameServer::simulation_loop()
             }
 
             WorldSnapshot snap;
-            snap.timestamp = start_time;
+            snap.tick = m_current_tick;
 
             for (auto const& pair : m_entity_states)
             {
@@ -206,7 +209,7 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
             if (type == GameMessageType::PLAYER_MOVE) 
                 remaining_size = 12; // 4 (id) + 4 (x) + 4 (y)
             else if (type == GameMessageType::PLAYER_ATTACK) 
-                remaining_size = 4;  // 4 (id)
+                remaining_size = 8;  // 4 (id) + 4 (tick)
             else if (type == GameMessageType::MAP_DATA)
                 remaining_size = 220; // 20 * 11 grid
             else 
@@ -284,7 +287,7 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                     else if (msg->type == GameMessageType::PLAYER_ATTACK) 
                     {
                         auto attack = static_cast<PlayerAttackMessage*>(msg.get());
-                        process_attack(attack->id);
+                        process_attack(attack->id, attack->tick);
                     }
                     else if (msg->type == GameMessageType::MAP_DATA)
                     {
@@ -342,7 +345,7 @@ void GameServer::broadcast_message(const std::vector<uint8_t>& message, std::sha
     }
 }
 
-void GameServer::process_attack(int32_t attacker_id)
+void GameServer::process_attack(int32_t attacker_id, uint32_t historical_tick)
 {
     std::lock_guard<std::mutex> lock(m_state_mutex);
 
@@ -350,22 +353,40 @@ void GameServer::process_attack(int32_t attacker_id)
     if (it == m_entity_states.end()) return;
 
     if (it->second.attackTimer.getElapsedTime().asSeconds() < 0.5f) return;
-
     it->second.attackTimer.restart();
 
-    sf::Vector2f attacker_pos = it->second.position;
+    WorldSnapshot target_snap;
+    if (!m_history.empty()) {
+        target_snap = m_history.back();
+
+        for (auto rit = m_history.rbegin(); rit != m_history.rend(); ++rit) 
+        {
+            if (rit->tick <= historical_tick) 
+            {
+                target_snap = *rit;
+                break;
+            }
+        }
+    }
+    else 
+        return; // Server just booted, no history available
+
+    if (target_snap.positions.find(attacker_id) == target_snap.positions.end()) return;
+    sf::Vector2f attacker_pos = target_snap.positions[attacker_id];
     float attack_range = 2.0f;
 
-    std::cout << "Player " << attacker_id << " attacked at " << attacker_pos.x << ", " << attacker_pos.y << std::endl;
+    std::cout << "Player " << attacker_id << " attacked at tick " << historical_tick << " from " << attacker_pos.x << ", " << attacker_pos.y << std::endl;
 
-    for (auto& pair : m_entity_states) 
+    for (const auto& pair : target_snap.positions) 
     {
-        if (pair.second.type == EntityType::PLAYER) continue;
-
         int32_t target_id = pair.first;
         if (target_id == attacker_id) continue;
 
-        sf::Vector2f target_pos = pair.second.position;
+        auto live_entity = m_entity_states.find(target_id);
+        if (live_entity == m_entity_states.end() || live_entity->second.type == EntityType::PLAYER)
+            continue;
+
+        sf::Vector2f target_pos = pair.second;
 
         float dx = attacker_pos.x - target_pos.x;
         float dy = attacker_pos.y - target_pos.y;
@@ -374,11 +395,11 @@ void GameServer::process_attack(int32_t attacker_id)
 
         if (distanceSquared <= rangeSquared)
         {
-            std::cout << "HIT! Player " << target_id << " was in range." << std::endl;
+            std::cout << "HIT! Player " << target_id << " was in range at tick " << historical_tick << std::endl;
 
             // TODO: Broadcast an ENTITY_DAMAGED message
         }
         else
-            std::cout << "MISS: Player " << target_id << " was too far away." << std::endl;
+            std::cout << "MISS: Player " << target_id << " was too far away at tick " << historical_tick << std::endl;
     }
 }

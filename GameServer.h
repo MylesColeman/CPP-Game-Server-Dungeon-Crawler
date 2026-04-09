@@ -6,13 +6,12 @@
 #include <mutex>
 #include <map>
 #include <memory>
-#include <chrono>
 #include <deque>
 #include "Pathfinding.h"
 
 struct WorldSnapshot 
 {
-    std::chrono::steady_clock::time_point timestamp;
+    uint32_t tick;
     std::map<int32_t, sf::Vector2f> positions;
 };
 
@@ -52,6 +51,7 @@ private:
 
     bool m_running = true;
     void simulation_loop();
+    uint32_t m_current_tick = 0;
     std::deque<WorldSnapshot> m_history;
     const size_t MAX_HISTORY = 30;
 
@@ -64,7 +64,7 @@ private:
     void handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my_id);
     void broadcast_message(const std::vector<uint8_t>& message, std::shared_ptr<sf::TcpSocket> sender);
 
-    void process_attack(int32_t attacker_id);
+    void process_attack(int32_t attacker_id, uint32_t historical_tick);
 };
 
 #endif
