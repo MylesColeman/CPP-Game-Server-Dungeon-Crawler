@@ -2,21 +2,29 @@
 
 #include <cstring>
 
+// -----------------------------------------------------------------------------------------------------------------------
+// Serialise function converts messages to a vector of bytes (technically ints of 8 bit size) to be sent to clients
+// First byte is the message ID used to identify the message
+// -----------------------------------------------------------------------------------------------------------------------
+
 std::vector<uint8_t> WorldStateMessage::serialise() const
 {
     std::vector<uint8_t> packet;
     packet.push_back(static_cast<uint8_t>(type));
 
+    // Adds the tick to the packet
     uint8_t tickBytes[4];
     std::memcpy(tickBytes, &tick, 4);
     packet.insert(packet.end(), tickBytes, tickBytes + 4);
 
-    uint32_t count = static_cast<uint32_t>(positions.size());
+	// Adds the number of entities to the packet, so the client knows how many to expect when deserialising
+    uint32_t count = static_cast<uint32_t>(entityPositions.size());
     uint8_t countBytes[4];
     std::memcpy(countBytes, &count, 4);
     packet.insert(packet.end(), countBytes, countBytes + 4);
 
-    for (auto const& pair : positions)
+	// Loops through all entities and adds their id and position to the byte array
+    for (auto const& pair : entityPositions)
     {
         int32_t id = pair.first;
         sf::Vector2f pos = pair.second;
@@ -32,11 +40,16 @@ std::vector<uint8_t> WorldStateMessage::serialise() const
     return packet;
 }
 
+// Creates 'GameMessage's from incoming vector of bytes (technically ints of 8 bit size)
 std::unique_ptr<GameMessage> GameMessageFactory::create(const std::vector<uint8_t>& bytes)
 {
-    if (bytes.empty()) return nullptr;
+	if (bytes.empty()) return nullptr; // Invalid message
 
-    GameMessageType type = static_cast<GameMessageType>(bytes[0]);
+	GameMessageType type = static_cast<GameMessageType>(bytes[0]); // Looks at the first byte and decides what type of message it is
+
+    // -----------------------------------------------------------------------------------------
+    // Using that first byte instantiates the correct message and returns a smart pointer
+    // -----------------------------------------------------------------------------------------
 
     if (type == GameMessageType::PLAYER_MOVE && bytes.size() >= 13)
     {
@@ -71,25 +84,26 @@ std::unique_ptr<GameMessage> GameMessageFactory::create(const std::vector<uint8_
         std::memcpy(&tick, &bytes[1], 4);
         std::memcpy(&count, &bytes[5], 4);
 
-        if (bytes.size() < 9 + (count * 12)) return nullptr;
+		if (bytes.size() < 9 + (count * 12)) return nullptr; // Checks if the message is long enough to contain all the entities it claims to have
 
         auto msg = std::make_unique<WorldStateMessage>();
         msg->tick = tick;
 
+		// Loops through all entities and extracts their id and position from the byte array
         for (uint32_t i = 0; i < count; ++i)
         {
             int32_t id;
             float x, y;
-            size_t offset = 9 + (i * 12);
+			size_t offset = 9 + (i * 12); // 9 bytes for type (Byte(1) + Int(4) + Int(4)), then 12 bytes per entity (Int(4) + Float(4) + Float(4))
 
             std::memcpy(&id, &bytes[offset], 4);
             std::memcpy(&x, &bytes[offset + 4], 4);
             std::memcpy(&y, &bytes[offset + 8], 4);
 
-            msg->positions[id] = sf::Vector2f(x, y);
+            msg->entityPositions[id] = sf::Vector2f(x, y);
         }
         return msg;
     }
 
-    return nullptr;
+	return nullptr; // Unknown or malformed message
 }

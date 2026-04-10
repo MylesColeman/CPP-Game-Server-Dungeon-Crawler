@@ -154,7 +154,7 @@ void GameServer::simulation_loop()
                 WorldStateMessage worldMsg;
                 worldMsg.tick = m_current_tick;
                 for (auto const& pair : m_entity_states) 
-                    worldMsg.positions[pair.first] = pair.second.position;
+                    worldMsg.entityPositions[pair.first] = pair.second.position;
 
                 std::vector<uint8_t> bytes = worldMsg.serialise();
 

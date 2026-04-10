@@ -28,6 +28,7 @@ class GameMessage
 // -----------------------------------------------------------------------------------------------------------------------------------------------
 // Message classes defined here, so they can be constructed by the 'GameMessageFactory' to be read here and elsewhere to be sent to clients
 // Message serialise function is only implemented where necessary - most messages are simply received and not sent
+// Serialise function converts messages to a vector of bytes (technically ints of 8 bit size) to be sent to clients
 // -----------------------------------------------------------------------------------------------------------------------------------------------
 
 // Player movement - has position
@@ -74,7 +75,7 @@ class WorldStateMessage : public GameMessage
 {
     public:
         uint32_t tick;
-        std::map<int32_t, sf::Vector2f> positions;
+        std::map<int32_t, sf::Vector2f> entityPositions;
 
         WorldStateMessage() 
         {
