@@ -2,42 +2,35 @@
 #define PATHFINDING_H
 
 #include <vector>
-#include <queue>
-#include <cmath>
-#include <algorithm>
 #include <SFML/System/Vector2.hpp>
-
-struct Node {
-    int x, y;
-    float g = 0;
-    float h = 0;
-    Node* parent = nullptr;
-    bool isInOpenSet = false;
-
-    float f() const { return g + h; }
-
-    bool operator>(const Node& other) const
-    {
-        return f() > other.f();
-    }
-};
 
 class Pathfinding 
 {
 public:
+    // Finds the shortest path from start position to goal,
+    // has knowledge of which 'Node's are blocked so they can be ignored for final path
     static std::vector<sf::Vector2f> findPath(int startX, int startY, int goalX, int goalY, const std::vector<bool>& collisionGrid, int width, int height);
 
 private:
-    static std::vector<Node> nodeGrid;
-
-    static float calculateManhattan(int x1, int y1, int x2, int y2) 
+    // Node used by A* 'Pathfinding' represents an individual tile/cell in the grid
+    struct Node
     {
-        float dx = std::abs(x1 - x2);
-        float dy = std::abs(y1 - y2);
-        return dx + dy + (dx * 0.001f);
-    }
+        int x, y; // Defines position
+        float g = 0; // Goal - how many steps currently taken
+        float h = 0; // Heuristic - educated guess on distance to target
+        float f() const { return g + h; } // Final cost - goal + heuristic
+        Node* parent = nullptr; // Holds the previous node, acting as a breadcrumb trail back to the start with the shortest path
+        
+        bool isInOpenSet = false; // By default unchecked, only moved to open set if relevant for checking
 
-    static std::vector<sf::Vector2f> reconstructPath(Node* goalNode);
+		bool operator>(const Node& other) const { return f() > other.f(); } // For priority queue to sort nodes based on their f() value
+    };
+
+    static std::vector<Node> grid;
+
+    // Calculates the Manhattan distance, optimistic distance from a Node to the goal ignoring obstacles
+    static float calculateManhattan(int x1, int y1, int x2, int y2); 
+    static std::vector<sf::Vector2f> reconstructPath(Node* goalNode); // Reconstructs the path from goal back to the starting position
 };
 
 #endif

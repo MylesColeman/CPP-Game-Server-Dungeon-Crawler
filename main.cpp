@@ -14,6 +14,4 @@ int main()
     // Waits for the UDP thread to finish before exiting the process
     if (udp_thread.joinable()) 
         udp_thread.join();
-
-    return 0;
 }

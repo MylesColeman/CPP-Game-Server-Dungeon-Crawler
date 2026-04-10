@@ -1,25 +1,28 @@
+#include <queue>
+#include <cmath>
+#include <algorithm>
 #include "Pathfinding.h"
 
-std::vector<Node> Pathfinding::nodeGrid;
+std::vector<Node> Pathfinding::grid;
 
 std::vector<sf::Vector2f> Pathfinding::findPath(int startX, int startY, int goalX, int goalY, const std::vector<bool>& collisionGrid, int width, int height)
 {
     if (startX < 0 || startY < 0 || goalX < 0 || goalY < 0 ||startX >= width || startY >= height || goalX >= width || goalY >= height) return {};
 
-    if (nodeGrid.size() != (size_t)(width * height))
-        nodeGrid.resize(width * height);
+    if (grid.size() != (size_t)(width * height))
+        grid.resize(width * height);
 
     for (int y = 0; y < height; ++y) 
     {
         for (int x = 0; x < width; ++x) 
         {
             int n = y * width + x;
-            nodeGrid[n].x = x;
-            nodeGrid[n].y = y;
-            nodeGrid[n].g = 0;
-            nodeGrid[n].h = 0;
-            nodeGrid[n].parent = nullptr;
-            nodeGrid[n].isInOpenSet = false;
+            grid[n].x = x;
+            grid[n].y = y;
+            grid[n].g = 0;
+            grid[n].h = 0;
+            grid[n].parent = nullptr;
+            grid[n].isInOpenSet = false;
         }
     }
 
@@ -27,7 +30,7 @@ std::vector<sf::Vector2f> Pathfinding::findPath(int startX, int startY, int goal
     std::priority_queue<Node*, std::vector<Node*>, decltype(cmp)> openSet(cmp);
     std::vector<bool> closedSet(width * height, false);
 
-    Node* startNode = &nodeGrid[startY * width + startX];
+    Node* startNode = &grid[startY * width + startX];
     startNode->g = 0;
     startNode->h = calculateManhattan(startX, startY, goalX, goalY);
     startNode->isInOpenSet = true;
@@ -56,7 +59,7 @@ std::vector<sf::Vector2f> Pathfinding::findPath(int startX, int startY, int goal
             int nIdx = ny * width + nx;
             if (collisionGrid[nIdx] || closedSet[nIdx]) continue;
 
-            Node* neighbour = &nodeGrid[nIdx];
+            Node* neighbour = &grid[nIdx];
             float tentativeG = current->g + 1;
 
             if (!neighbour->isInOpenSet || tentativeG < neighbour->g) 
@@ -73,6 +76,13 @@ std::vector<sf::Vector2f> Pathfinding::findPath(int startX, int startY, int goal
     }
 
     return {};
+}
+
+float Pathfinding::calculateManhattan(int x1, int y1, int x2, int y2)
+{
+    float dx = std::abs(x1 - x2);
+    float dy = std::abs(y1 - y2);
+    return dx + dy + (dx * 0.001f);
 }
 
 std::vector<sf::Vector2f> Pathfinding::reconstructPath(Node* goalNode)
