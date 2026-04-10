@@ -13,7 +13,7 @@ LDFLAGS = -L${SFML_PATH}lib/
 LDLIBS = -lsfml-graphics -lsfml-window -lsfml-system -lsfml-network -pthread
 
 # Object files to be generated
-OBJS=GameServer.o main.o Pathfinding.o
+OBJS=main.o GameServer.o GameMessage.o Pathfinding.o
 
 # Default target, builds the server executable
 all: server
@@ -23,8 +23,9 @@ server: $(OBJS)
 	$(CXX) $(LDFLAGS) $(OBJS) -o $@ $(LDLIBS)
 
 # Specifies dependencies for each object file
-GameServer.o: GameServer.cpp GameServer.h GameMessage.h Pathfinding.h
 main.o: main.cpp GameServer.h
+GameServer.o: GameServer.cpp GameServer.h GameMessage.h Pathfinding.h
+GameMessage.o: GameMessage.cpp GameMessage.h
 Pathfinding.o: Pathfinding.cpp Pathfinding.h
 # Fallback rule to compile any .cpp file into a .o file, if no specific rule is defined for that file
 %.o: %.cpp
