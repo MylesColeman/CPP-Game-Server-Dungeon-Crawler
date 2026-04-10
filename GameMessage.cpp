@@ -1,4 +1,5 @@
 #include "GameMessage.h"
+
 #include <cstring>
 
 std::vector<uint8_t> WorldStateMessage::serialise() const

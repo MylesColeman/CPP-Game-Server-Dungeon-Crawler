@@ -1,7 +1,8 @@
+#include "Pathfinding.h"
+
 #include <queue>
 #include <cmath>
 #include <algorithm>
-#include "Pathfinding.h"
 
 std::vector<Pathfinding::Node> Pathfinding::grid; // Reusable grid to avoid reallocating memory every time, resized if dimensions change
 
