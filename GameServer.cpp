@@ -113,6 +113,7 @@ void GameServer::udp_start()
 
 void GameServer::simulation_loop()
 {
+    const float dt = 0.01666f;
     auto tick_duration = std::chrono::milliseconds(16);
     int tick_count = 0;
 
@@ -132,9 +133,11 @@ void GameServer::simulation_loop()
                 {
                     sf::Vector2f target = state.currentPath.front();
                     sf::Vector2f direction = target - state.position;
-                    float distance = std::sqrt(direction.x * direction.x + direction.y * direction.y);
+                    float distSq = (direction.x * direction.x) + (direction.y * direction.y);
+                    float moveStep = state.speed * dt;
+                    float moveStepSq = moveStep * moveStep;
 
-                    if (distance <= (state.speed * 0.016f))
+                    if (distSq <= moveStepSq)
                     {
                         state.position = target;
                         state.currentPath.erase(state.currentPath.begin());
@@ -143,7 +146,10 @@ void GameServer::simulation_loop()
                             state.isMoving = false;
                     }
                     else
-                        state.position += (direction / distance) * (state.speed * 0.016f);
+                    {
+                        float distance = std::sqrt(distSq);
+                        state.position += (direction / distance) * moveStep;
+                    }
                 }
             }
 
