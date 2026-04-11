@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "GameServer.h"
+
 // -----------------------------------------------------------------------------------------------------------------------
 // Serialise function converts messages to a vector of bytes (technically ints of 8 bit size) to be sent to clients
 // First byte is the message ID used to identify the message
@@ -51,7 +53,7 @@ std::unique_ptr<GameMessage> GameMessageFactory::create(const std::vector<uint8_
     // Using that first byte instantiates the correct message and returns a smart pointer
     // -----------------------------------------------------------------------------------------
 
-    if (type == GameMessageType::PLAYER_MOVE && bytes.size() >= 13)
+    if (type == GameMessageType::PLAYER_MOVE && bytes.size() >= 1 + GameServer::MOVE_PAYLOAD_SIZE)
     {
         int32_t id;
         float x, y;
@@ -62,7 +64,7 @@ std::unique_ptr<GameMessage> GameMessageFactory::create(const std::vector<uint8_
         return std::make_unique<PlayerMoveMessage>(id, x, y);
     }
 
-    if (type == GameMessageType::PLAYER_ATTACK && bytes.size() >= 9) {
+    if (type == GameMessageType::PLAYER_ATTACK && bytes.size() >= 1 + GameServer::ATTACK_PAYLOAD_SIZE) {
         int32_t id;
         uint32_t tick;
         std::memcpy(&id, &bytes[1], 4);
@@ -70,21 +72,21 @@ std::unique_ptr<GameMessage> GameMessageFactory::create(const std::vector<uint8_
         return std::make_unique<PlayerAttackMessage>(id, tick);
     }
 
-    if (type == GameMessageType::MAP_DATA && bytes.size() >= 221)
+    if (type == GameMessageType::MAP_DATA && bytes.size() >= 1 +GameServer::MAP_DATA_SIZE)
     {
-        std::vector<uint8_t> grid(220);
-        std::memcpy(grid.data(), &bytes[1], 220);
-        return std::make_unique<MapDataMessage>(20, 11, grid);
+        std::vector<uint8_t> grid(GameServer::MAP_DATA_SIZE);
+        std::memcpy(grid.data(), &bytes[1], GameServer::MAP_DATA_SIZE);
+        return std::make_unique<MapDataMessage>(GameServer::MAP_WIDTH, GameServer::MAP_HEIGHT, grid);
     }
 
-    if (type == GameMessageType::WORLD_STATE && bytes.size() >= 9)
+    if (type == GameMessageType::WORLD_STATE && bytes.size() >= GameServer::WORLD_STATE_HEADER)
     {
         uint32_t tick;
         uint32_t count;
         std::memcpy(&tick, &bytes[1], 4);
         std::memcpy(&count, &bytes[5], 4);
 
-		if (bytes.size() < 9 + (count * 12)) return nullptr; // Checks if the message is long enough to contain all the entities it claims to have
+		if (bytes.size() < GameServer::WORLD_STATE_HEADER + (count * GameServer::ENTITY_DATA_SIZE)) return nullptr; // Checks if the message is long enough to contain all the entities it claims to have
 
         auto msg = std::make_unique<WorldStateMessage>();
         msg->tick = tick;
@@ -94,7 +96,7 @@ std::unique_ptr<GameMessage> GameMessageFactory::create(const std::vector<uint8_
         {
             int32_t id;
             float x, y;
-			size_t offset = 9 + (i * 12); // 9 bytes for type (Byte(1) + Int(4) + Int(4)), then 12 bytes per entity (Int(4) + Float(4) + Float(4))
+			size_t offset = GameServer::WORLD_STATE_HEADER + (i * GameServer::ENTITY_DATA_SIZE); // 9 bytes for type (Byte(1) + Int(4) + Int(4)), then 12 bytes per entity (Int(4) + Float(4) + Float(4))
 
             std::memcpy(&id, &bytes[offset], 4);
             std::memcpy(&x, &bytes[offset + 4], 4);

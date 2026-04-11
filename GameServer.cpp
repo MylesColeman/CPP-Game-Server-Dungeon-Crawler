@@ -14,6 +14,22 @@
 // It would work similarly with slightly older versions of SFML.
 // A thourough rework is necessary for SFML 3.0.
 
+constexpr uint16_t GameServer::MAP_WIDTH;
+constexpr uint16_t GameServer::MAP_HEIGHT;
+
+constexpr size_t GameServer::MOVE_PAYLOAD_SIZE;
+constexpr size_t GameServer::ATTACK_PAYLOAD_SIZE;
+constexpr size_t GameServer::MAP_DATA_SIZE;
+constexpr size_t GameServer::WORLD_STATE_HEADER;
+constexpr size_t GameServer::ENTITY_DATA_SIZE;
+
+constexpr size_t GameServer::MAX_HISTORY_TICKS;
+constexpr float GameServer::TICK_RATE_MS;
+constexpr float GameServer::DELTA_TIME;
+constexpr int GameServer::BROADCAST_INTERVAL;
+constexpr float GameServer::ATTACK_COOLDOWN;
+constexpr float GameServer::ATTACK_RANGE;
+
 GameServer::GameServer(unsigned short tcp_port, unsigned short udp_port) :
     m_tcp_port(tcp_port), m_udp_port(udp_port) 
 {
@@ -216,11 +232,11 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
             size_t remaining_size = 0;
 
             if (type == GameMessageType::PLAYER_MOVE) 
-                remaining_size = 12; // 4 (id) + 4 (x) + 4 (y)
+                remaining_size = MOVE_PAYLOAD_SIZE;
             else if (type == GameMessageType::PLAYER_ATTACK) 
-                remaining_size = 8;  // 4 (id) + 4 (tick)
+                remaining_size = ATTACK_PAYLOAD_SIZE;
             else if (type == GameMessageType::MAP_DATA)
-                remaining_size = 220; // 20 * 11 grid
+                remaining_size = MAP_DATA_SIZE;
             else 
             {
                 std::cerr << "Unknown message type received: " << (int)type_byte << std::endl;

@@ -40,6 +40,15 @@ struct PlayerState
 class GameServer 
 {
 public:
+    static constexpr uint16_t MAP_WIDTH = 20;
+    static constexpr uint16_t MAP_HEIGHT = 11;
+
+    static constexpr size_t MOVE_PAYLOAD_SIZE = 12; // Int(4) + Float(4) + Float(4)
+    static constexpr size_t ATTACK_PAYLOAD_SIZE = 8; // Int(4) + Int(4)
+    static constexpr size_t MAP_DATA_SIZE = MAP_WIDTH * MAP_HEIGHT; // 20 * 11 grid
+    static constexpr size_t WORLD_STATE_HEADER = 9; // Byte(1) + Int(4) + Int(4)
+    static constexpr size_t ENTITY_DATA_SIZE = 12; // Int(4) + Float(4) + Float(4)
+
     GameServer(unsigned short tcp_port, unsigned short udp_port);
     void tcp_start();
     void udp_start();
