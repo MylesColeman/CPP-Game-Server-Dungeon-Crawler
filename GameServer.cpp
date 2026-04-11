@@ -233,27 +233,27 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                     {
                         auto move = static_cast<PlayerMoveMessage*>(msg.get());
                         {
-                            std::lock_guard<std::mutex> state_lock(m_state_mutex);
-
-                            // If position is 0, 0; this is the first move message so set their position directly without pathfinding
-                            if (m_entity_states[move->id].position.x == 0.0f && m_entity_states[move->id].position.y == 0.0f)
+                            sf::Vector2f startPos;
+                            MapGrid mapCopy;
                             {
-                                m_entity_states[move->id].position = sf::Vector2f(move->posX, move->posY);
-                                std::cout << "Initial sync: Player " << move->id << " teleported to " << move->posX << ", " << move->posY << std::endl;
-                            }
-                            else
-                            {
-                                // Standard pathfinding for subsequent moves
-                                sf::Vector2f startPos;
+                                std::lock_guard<std::mutex> state_lock(m_state_mutex);
 
-                                if (m_entity_states[move->id].isMoving && !m_entity_states[move->id].currentPath.empty()) 
-                                    startPos = m_entity_states[move->id].currentPath.front();
-                                else 
-                                    startPos = m_entity_states[move->id].position;
+                                if (m_entity_states.find(move->id) == m_entity_states.end()) return;
 
-                                std::cout << "SERVER A* START: (" << startPos.x << ", " << startPos.y << ") to (" << move->posX << ", " << move->posY << ")" << std::endl;
-                                
-                                std::vector<bool> dynamicCollision = m_current_map.collision;
+                                // If position is 0, 0; this is the first move message so set their position directly without pathfinding
+                                if (m_entity_states[move->id].position.x == 0.0f && m_entity_states[move->id].position.y == 0.0f)
+                                {
+                                    m_entity_states[move->id].position = sf::Vector2f(move->posX, move->posY);
+                                    std::cout << "Initial sync: Player " << move->id << " teleported to " << move->posX << ", " << move->posY << std::endl;
+
+                                    broadcast_message(full_packet, client);
+                                    continue;
+                                }
+
+                                startPos = (m_entity_states[move->id].isMoving && !m_entity_states[move->id].currentPath.empty())
+                                    ? m_entity_states[move->id].currentPath.front() : m_entity_states[move->id].position;
+
+                                mapCopy = m_current_map;
 
                                 for (const auto& pair : m_entity_states)
                                 {
@@ -262,25 +262,26 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
                                         int px = static_cast<int>(pair.second.position.x);
                                         int py = static_cast<int>(pair.second.position.y);
 
-                                        if (px >= 0 && px < m_current_map.width && py >= 0 && py < m_current_map.height)
-                                            dynamicCollision[py * m_current_map.width + px] = true;
+                                        if (px >= 0 && px < mapCopy.width && py >= 0 && py < mapCopy.height)
+                                            mapCopy.collision[py * mapCopy.width + px] = true;
                                     }
                                 }
+                            }
 
-                                auto truePath = Pathfinding::findPath
-                                ((int)startPos.x, (int)startPos.y,
-                                    (int)move->posX, (int)move->posY,
-                                    dynamicCollision,
-                                    m_current_map.width, m_current_map.height);
-
-                                if (!truePath.empty()) 
+                            auto truePath = Pathfinding::findPath((int)startPos.x, (int)startPos.y, (int)move->posX, (int)move->posY, 
+                                mapCopy.collision, mapCopy.width, mapCopy.height);
+                            
+                            if (!truePath.empty())
+                            {
+                                std::lock_guard<std::mutex> state_lock(m_state_mutex);
+                                if (m_entity_states.find(move->id) != m_entity_states.end())
                                 {
                                     m_entity_states[move->id].currentPath = truePath;
                                     m_entity_states[move->id].isMoving = true;
                                 }
-                                else
-                                    std::cout << "Invalid path requested by Player " << move->id << std::endl;
                             }
+                            else
+                                std::cout << "Invalid path requested by Player " << move->id << std::endl;
                         }
                         std::cout << "Relaying Move: Player " << move->id << " to " << move->posX << ", " << move->posY << std::endl;
                     }
