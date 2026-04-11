@@ -7,7 +7,7 @@
 #include <map>
 #include <memory>
 #include <deque>
-#include "Pathfinding.h"
+#include <cstdint>
 
 struct WorldSnapshot 
 {
@@ -32,7 +32,7 @@ struct PlayerState
     sf::Vector2f position;
     std::vector<sf::Vector2f> currentPath;
     bool isMoving = false;
-    float speed = 5.f / 60.f;
+    float speed = 5.f;
     EntityType type;
     sf::Clock attackTimer;
 };
@@ -53,8 +53,14 @@ private:
     void simulation_loop();
     uint32_t m_current_tick = 0;
     std::deque<WorldSnapshot> m_history;
-    const size_t MAX_HISTORY = 30;
+    static constexpr size_t MAX_HISTORY_TICKS = 30;
+    static constexpr float TICK_RATE_MS = 16.0f;
+    static constexpr float DELTA_TIME = 1.0f / 60.0f;
+    static constexpr int BROADCAST_INTERVAL = 6;
 
+    static constexpr float ATTACK_COOLDOWN = 0.5f;
+    static constexpr float ATTACK_RANGE = 2.0f;
+    
     MapGrid m_current_map;
 
     int32_t m_next_id = 0;

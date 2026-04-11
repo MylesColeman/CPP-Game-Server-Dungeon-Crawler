@@ -1,10 +1,14 @@
+#include "GameServer.h"
+
 #include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <thread>
 #include <cmath>
-#include "GameServer.h"
+#include <chrono>
+
 #include "GameMessage.h"
+#include "Pathfinding.h"
 
 // Note: This is compiled with SFML 2.6.2 in mind.
 // It would work similarly with slightly older versions of SFML.
@@ -113,8 +117,7 @@ void GameServer::udp_start()
 
 void GameServer::simulation_loop()
 {
-    const float dt = 0.01666f;
-    auto tick_duration = std::chrono::milliseconds(16);
+    auto tick_duration = std::chrono::milliseconds(static_cast<long>(TICK_RATE_MS));
     int tick_count = 0;
 
     while (m_running) {
@@ -134,7 +137,7 @@ void GameServer::simulation_loop()
                     sf::Vector2f target = state.currentPath.front();
                     sf::Vector2f direction = target - state.position;
                     float distSq = (direction.x * direction.x) + (direction.y * direction.y);
-                    float moveStep = state.speed * dt;
+                    float moveStep = state.speed * DELTA_TIME;
                     float moveStepSq = moveStep * moveStep;
 
                     if (distSq <= moveStepSq)
@@ -153,7 +156,7 @@ void GameServer::simulation_loop()
                 }
             }
 
-            if (++tick_count >= 6) 
+            if (++tick_count >= BROADCAST_INTERVAL)
             {
                 tick_count = 0;
 
@@ -179,7 +182,7 @@ void GameServer::simulation_loop()
 
             m_history.push_back(snap);
 
-            if (m_history.size() > MAX_HISTORY) 
+            if (m_history.size() > MAX_HISTORY_TICKS)
                 m_history.pop_front();
         }
 
@@ -359,7 +362,7 @@ void GameServer::process_attack(int32_t attacker_id, uint32_t historical_tick)
     auto it = m_entity_states.find(attacker_id);
     if (it == m_entity_states.end()) return;
 
-    if (it->second.attackTimer.getElapsedTime().asSeconds() < 0.5f) return;
+    if (it->second.attackTimer.getElapsedTime().asSeconds() < ATTACK_COOLDOWN) return;
     it->second.attackTimer.restart();
 
     WorldSnapshot target_snap;
@@ -380,7 +383,6 @@ void GameServer::process_attack(int32_t attacker_id, uint32_t historical_tick)
 
     if (target_snap.positions.find(attacker_id) == target_snap.positions.end()) return;
     sf::Vector2f attacker_pos = target_snap.positions[attacker_id];
-    float attack_range = 2.0f;
 
     std::cout << "Player " << attacker_id << " attacked at tick " << historical_tick << " from " << attacker_pos.x << ", " << attacker_pos.y << std::endl;
 
@@ -398,7 +400,7 @@ void GameServer::process_attack(int32_t attacker_id, uint32_t historical_tick)
         float dx = attacker_pos.x - target_pos.x;
         float dy = attacker_pos.y - target_pos.y;
         float distanceSquared = (dx * dx) + (dy * dy);
-        float rangeSquared = attack_range * attack_range;
+        float rangeSquared = ATTACK_RANGE * ATTACK_RANGE;
 
         if (distanceSquared <= rangeSquared)
         {
