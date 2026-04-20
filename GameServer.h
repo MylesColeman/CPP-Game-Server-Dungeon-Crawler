@@ -74,6 +74,8 @@ public:
     // This is used to echo client pings so they can discover the server's local IP address to connect to the TCP server
     void udpStart();
 private:
+    bool m_running = true; // Flag to control the main server loop and allow for graceful shutdown
+
     // Networking
     unsigned short m_tcpPort;
     unsigned short m_udpPort;
@@ -82,7 +84,6 @@ private:
 
 	// Simulation
     void simulationLoop(); // Main loop that updates the game state at a fixed tick rate, processes player actions, and broadcasts world state to clients
-	bool m_running = true; // Flag to control the main simulation loop
 	uint32_t m_currentTick = 0; // Current tick count, incremented each simulation loop iteration
 	std::deque<WorldSnapshot> m_history; // History of world snapshots for the last MAX_HISTORY_TICKS ticks, used for client reconciliation and lag compensation
     
