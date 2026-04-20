@@ -38,7 +38,7 @@ GameServer::GameServer(unsigned short tcp_port, unsigned short udp_port) :
 
 // Binds to a port and then loops around.  For every client that connects,
 // we start a new thread receiving their messages.
-void GameServer::tcp_start()
+void GameServer::tcpStart()
 {
     // BINDING
     sf::TcpListener listener;
@@ -92,7 +92,7 @@ void GameServer::tcp_start()
 
 // UDP echo server. Used to let the clients know our IP address in case
 // they send a UDP broadcast message.
-void GameServer::udp_start()
+void GameServer::udpStart()
 {
     // BINDING
     sf::UdpSocket socket;
@@ -131,7 +131,7 @@ void GameServer::udp_start()
     std::cout << "Server stopped" << std::endl;
 }
 
-void GameServer::simulation_loop()
+void GameServer::simulationLoop()
 {
     auto tick_duration = std::chrono::milliseconds(static_cast<long>(TICK_RATE_MS));
     int tick_count = 0;
@@ -211,7 +211,7 @@ void GameServer::simulation_loop()
 
 // Loop around, receive messages from client and send them to all
 // the other connected clients.
-void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my_id)
+void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t my_id)
 {
     // RECEIVING
     while (true)
@@ -346,7 +346,7 @@ void GameServer::handle_client(std::shared_ptr<sf::TcpSocket> client, int32_t my
 }
 
 // Sends `message` from `sender` to all the other connected clients
-void GameServer::broadcast_message(const std::vector<uint8_t>& message, std::shared_ptr<sf::TcpSocket> sender)
+void GameServer::broadcastMessage(const std::vector<uint8_t>& message, std::shared_ptr<sf::TcpSocket> sender)
 {
     // You might want to validate the message before you send it.
     // A few reasons for that:
@@ -371,7 +371,7 @@ void GameServer::broadcast_message(const std::vector<uint8_t>& message, std::sha
     }
 }
 
-void GameServer::process_attack(int32_t attacker_id, uint32_t historical_tick)
+void GameServer::processAttack(int32_t attacker_id, uint32_t historical_tick)
 {
     std::lock_guard<std::mutex> lock(m_state_mutex);
 
