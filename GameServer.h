@@ -88,6 +88,7 @@ private:
     
 	MapGrid m_currentMap; // Current map data, including dimensions and collision grid, which is updated when the server receives new map data from clients
 
+	// Entity Management
 	int32_t m_nextId = 0; // Counter for assigning unique IDs to all entities
 	std::map<int32_t, EntityState> m_entityStates; // Authoritative state of all entities in the game, indexed by their unique ID
 	std::mutex m_stateMutex; // Mutex to protect access to the entity states and world history
