@@ -35,7 +35,7 @@ constexpr float GameServer::ATTACK_RANGE;
 GameServer::GameServer(unsigned short tcpPort, unsigned short udpPort) :
     m_tcpPort(tcpPort), m_udpPort(udpPort) 
 {
-	std::thread(&GameServer::simulation_loop, this).detach(); // Start the simulation loop in a detached thread
+	std::thread(&GameServer::simulationLoop, this).detach(); // Start the simulation loop in a detached thread
 }
 
 // Starts the TCP server, binds to the specified port, and listens for incoming client connections
@@ -45,7 +45,7 @@ void GameServer::tcpStart()
 {
 	// Binds the listener to the specified TCP port and starts listening for incoming connections
     sf::TcpListener listener;
-    sf::Socket::Status status = listener.listen(m_tcp_port);
+    sf::Socket::Status status = listener.listen(m_tcpPort);
 	// If the listener fails to bind to the port, an error message is printed and the function returns
     if (status != sf::Socket::Status::Done)
     {
@@ -53,7 +53,7 @@ void GameServer::tcpStart()
         return;
     }
 
-    std::cout << "TCP Server is listening to port " << m_tcp_port << ", waiting for connections..." << std::endl;
+    std::cout << "TCP Server is listening to port " << m_tcpPort << ", waiting for connections..." << std::endl;
 
 	// Loop for incoming client connections
     while (m_running)
@@ -68,19 +68,19 @@ void GameServer::tcpStart()
             int32_t assignedId;
 			// Assigns a unique ID to the client and adds them to the list of connected clients
             {
-                std::lock_guard<std::mutex> lock(m_clients_mutex);
-                assignedId = m_next_id++;
+                std::lock_guard<std::mutex> lock(m_clientsMutex);
+                assignedId = m_nextId++;
                 m_clients.push_back(client);
             }
 
 			// Initialises the player's state in the authoritative server state
             {
-                std::lock_guard<std::mutex> state_lock(m_state_mutex);
-                PlayerState newState;
+                std::lock_guard<std::mutex> state_lock(m_stateMutex);
+                EntityState newState;
                 newState.position = sf::Vector2f(0.0f, 0.0f);
                 newState.type = EntityType::PLAYER;
                 newState.speed = 5.0f;
-                m_entity_states[assignedId] = newState;
+                m_entityStates[assignedId] = newState;
             }
 
             std::cout << "New client connected: " << client->getRemoteAddress() << std::endl;
@@ -91,7 +91,7 @@ void GameServer::tcpStart()
                 std::cerr << "Could not send ID to client " << assignedId << std::endl;
 
             // Start a new thread to handle communication with the client, decoupled from the main server loop so that one slow client doesn't affect others
-			std::thread(&GameServer::handle_client, this, client, assignedId).detach(); 
+			std::thread(&GameServer::handleClient, this, client, assignedId).detach(); 
         }
     }
 }
@@ -153,13 +153,13 @@ void GameServer::simulationLoop()
         auto start_time = std::chrono::steady_clock::now();
 
         {
-            std::lock_guard<std::mutex> lock(m_state_mutex);
+            std::lock_guard<std::mutex> lock(m_stateMutex);
 
-            m_current_tick++;
+            m_currentTick++;
 
-            for (auto& pair : m_entity_states)
+            for (auto& pair : m_entityStates)
             {
-                PlayerState& state = pair.second;
+                EntityState& state = pair.second;
 
                 if (state.isMoving && !state.currentPath.empty())
                 {
@@ -190,22 +190,22 @@ void GameServer::simulationLoop()
                 tick_count = 0;
 
                 WorldStateMessage worldMsg;
-                worldMsg.tick = m_current_tick;
-                for (auto const& pair : m_entity_states) 
+                worldMsg.tick = m_currentTick;
+                for (auto const& pair : m_entityStates) 
                     worldMsg.entityPositions[pair.first] = pair.second.position;
 
                 std::vector<uint8_t> bytes = worldMsg.serialise();
 
-                broadcast_message(bytes, nullptr);
+                broadcastMessage(bytes, nullptr);
             }
 
             WorldSnapshot snap;
-            snap.tick = m_current_tick;
+            snap.tick = m_currentTick;
 
-            for (auto const& pair : m_entity_states)
+            for (auto const& pair : m_entityStates)
             {
                 int32_t id = pair.first;
-                const PlayerState& state = pair.second;
+                const EntityState& state = pair.second;
                 snap.positions[id] = state.position;
             }
 
@@ -274,26 +274,26 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t my_
                             sf::Vector2f startPos;
                             MapGrid mapCopy;
                             {
-                                std::lock_guard<std::mutex> state_lock(m_state_mutex);
+                                std::lock_guard<std::mutex> state_lock(m_stateMutex);
 
-                                if (m_entity_states.find(move->id) == m_entity_states.end()) return;
+                                if (m_entityStates.find(move->id) == m_entityStates.end()) return;
 
                                 // If position is 0, 0; this is the first move message so set their position directly without pathfinding
-                                if (m_entity_states[move->id].position.x == 0.0f && m_entity_states[move->id].position.y == 0.0f)
+                                if (m_entityStates[move->id].position.x == 0.0f && m_entityStates[move->id].position.y == 0.0f)
                                 {
-                                    m_entity_states[move->id].position = sf::Vector2f(move->posX, move->posY);
+                                    m_entityStates[move->id].position = sf::Vector2f(move->posX, move->posY);
                                     std::cout << "Initial sync: Player " << move->id << " teleported to " << move->posX << ", " << move->posY << std::endl;
 
-                                    broadcast_message(full_packet, client);
+                                    broadcastMessage(full_packet, client);
                                     continue;
                                 }
 
-                                startPos = (m_entity_states[move->id].isMoving && !m_entity_states[move->id].currentPath.empty())
-                                    ? m_entity_states[move->id].currentPath.front() : m_entity_states[move->id].position;
+                                startPos = (m_entityStates[move->id].isMoving && !m_entityStates[move->id].currentPath.empty())
+                                    ? m_entityStates[move->id].currentPath.front() : m_entityStates[move->id].position;
 
-                                mapCopy = m_current_map;
+                                mapCopy = m_currentMap;
 
-                                for (const auto& pair : m_entity_states)
+                                for (const auto& pair : m_entityStates)
                                 {
                                     if (pair.first != move->id && pair.second.type == EntityType::PLAYER)
                                     {
@@ -311,11 +311,11 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t my_
                             
                             if (!truePath.empty())
                             {
-                                std::lock_guard<std::mutex> state_lock(m_state_mutex);
-                                if (m_entity_states.find(move->id) != m_entity_states.end())
+                                std::lock_guard<std::mutex> state_lock(m_stateMutex);
+                                if (m_entityStates.find(move->id) != m_entityStates.end())
                                 {
-                                    m_entity_states[move->id].currentPath = truePath;
-                                    m_entity_states[move->id].isMoving = true;
+                                    m_entityStates[move->id].currentPath = truePath;
+                                    m_entityStates[move->id].isMoving = true;
                                 }
                             }
                             else
@@ -326,35 +326,35 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t my_
                     else if (msg->type == GameMessageType::PLAYER_ATTACK) 
                     {
                         auto attack = static_cast<PlayerAttackMessage*>(msg.get());
-                        process_attack(attack->id, attack->tick);
+                        processAttack(attack->id, attack->tick);
                     }
                     else if (msg->type == GameMessageType::MAP_DATA)
                     {
                         auto mapMsg = static_cast<MapDataMessage*>(msg.get());
                         {
-                            std::lock_guard<std::mutex> state_lock(m_state_mutex);
-                            m_current_map.width = mapMsg->width;
-                            m_current_map.height = mapMsg->height;
-                            m_current_map.collision.clear();
+                            std::lock_guard<std::mutex> state_lock(m_stateMutex);
+                            m_currentMap.width = mapMsg->width;
+                            m_currentMap.height = mapMsg->height;
+                            m_currentMap.collision.clear();
                             for (uint8_t b : mapMsg->grid) {
-                                m_current_map.collision.push_back(b == 1);
+                                m_currentMap.collision.push_back(b == 1);
                             }
                         }
                         std::cout << "Server received Map Data: " << mapMsg->width << "x" << mapMsg->height << std::endl;
                     }
 
-                    broadcast_message(full_packet, client);
+                    broadcastMessage(full_packet, client);
                 }
             }
         }
     }
 
     {
-        std::lock_guard<std::mutex> state_lock(m_state_mutex);
-        m_entity_states.erase(my_id);
+        std::lock_guard<std::mutex> state_lock(m_stateMutex);
+        m_entityStates.erase(my_id);
     }
 
-    std::lock_guard<std::mutex> lock(m_clients_mutex);
+    std::lock_guard<std::mutex> lock(m_clientsMutex);
     m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), client), m_clients.end());
 }
 
@@ -369,7 +369,7 @@ void GameServer::broadcastMessage(const std::vector<uint8_t>& message, std::shar
     // 4. Compensate for latency and perform rollbacks (usually done in Ded Reckoning).
     // 5. Delay the sending of messages to make the game fairer wrt high ping players.
     // This is where you can write the authoritative part of the server.
-    std::lock_guard<std::mutex> lock(m_clients_mutex);
+    std::lock_guard<std::mutex> lock(m_clientsMutex);
     for (auto& client : m_clients)
     {
         if (client != sender)
@@ -386,10 +386,10 @@ void GameServer::broadcastMessage(const std::vector<uint8_t>& message, std::shar
 
 void GameServer::processAttack(int32_t attacker_id, uint32_t historical_tick)
 {
-    std::lock_guard<std::mutex> lock(m_state_mutex);
+    std::lock_guard<std::mutex> lock(m_stateMutex);
 
-    auto it = m_entity_states.find(attacker_id);
-    if (it == m_entity_states.end()) return;
+    auto it = m_entityStates.find(attacker_id);
+    if (it == m_entityStates.end()) return;
 
     if (it->second.attackTimer.getElapsedTime().asSeconds() < ATTACK_COOLDOWN) return;
     it->second.attackTimer.restart();
@@ -420,8 +420,8 @@ void GameServer::processAttack(int32_t attacker_id, uint32_t historical_tick)
         int32_t target_id = pair.first;
         if (target_id == attacker_id) continue;
 
-        auto live_entity = m_entity_states.find(target_id);
-        if (live_entity == m_entity_states.end() || live_entity->second.type == EntityType::PLAYER)
+        auto live_entity = m_entityStates.find(target_id);
+        if (live_entity == m_entityStates.end() || live_entity->second.type == EntityType::PLAYER)
             continue;
 
         sf::Vector2f target_pos = pair.second;
