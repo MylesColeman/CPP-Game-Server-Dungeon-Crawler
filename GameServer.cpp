@@ -144,31 +144,39 @@ void GameServer::udpStart()
     std::cout << "UDP Discovery: Thread terminated safely." << std::endl;
 }
 
+// Main loop that updates the game state at a fixed tick rate, processes player actions, and broadcasts world state to clients
 void GameServer::simulationLoop()
 {
-    auto tick_duration = std::chrono::milliseconds(static_cast<long>(TICK_RATE_MS));
-    int tick_count = 0;
+    auto tickDuration = std::chrono::milliseconds(static_cast<long>(TICK_RATE_MS)); // Used to calculate how long to sleep thread for to maintain 60Hz
+    int tickCount = 0; // Counter for broadcast interval
 
-    while (m_running) {
-        auto start_time = std::chrono::steady_clock::now();
+    // Simulation loop, runs at a fixed 60Hz tick rate
+    // Handles authoritative entity movement, records historical snapshots for lag compensation, and broadcasts the world state to all connected clients with a 10Hz interval
+    while (m_running) 
+    {
+        auto startTime = std::chrono::steady_clock::now(); // Records the exact moment the simulation begins its loop
 
+        // Updates entity positions, uses these positions to build the 'WorldStateMessage', also pushes these finalised positions into a 'WorldSnapshot' for 'm_history' 
         {
             std::lock_guard<std::mutex> lock(m_stateMutex);
 
-            m_currentTick++;
+            m_currentTick++; // Increments running total of server ticks
 
+            // Processes the movement for all entities
             for (auto& pair : m_entityStates)
             {
                 EntityState& state = pair.second;
 
+                // Checks if the entity is moving, and currently has a path
                 if (state.isMoving && !state.currentPath.empty())
                 {
-                    sf::Vector2f target = state.currentPath.front();
+                    sf::Vector2f target = state.currentPath.front(); // Takes first node on the grid
                     sf::Vector2f direction = target - state.position;
                     float distSq = (direction.x * direction.x) + (direction.y * direction.y);
-                    float moveStep = state.speed * DELTA_TIME;
-                    float moveStepSq = moveStep * moveStep;
+                    float moveStep = state.speed * DELTA_TIME; // Maximum allowed distance this tick
+                    float moveStepSq = moveStep * moveStep; // Used to check distance to target
 
+                    // Entity will overshoot movement this tick, just snap them
                     if (distSq <= moveStepSq)
                     {
                         state.position = target;
@@ -177,31 +185,34 @@ void GameServer::simulationLoop()
                         if (state.currentPath.empty()) 
                             state.isMoving = false;
                     }
-                    else
+                    else // Standard movement 
                     {
                         float distance = std::sqrt(distSq);
-                        state.position += (direction / distance) * moveStep;
+                        state.position += (direction / distance) * moveStep; // Normalises the vector and moves them by the 'moveStep'
                     }
                 }
             }
 
-            if (++tick_count >= BROADCAST_INTERVAL)
+            // Increments the tick count to check if the elapsed broadcasting time has passed
+            if (++tickCount >= BROADCAST_INTERVAL)
             {
-                tick_count = 0;
+                tickCount = 0; // Resets for following broadcasts
 
                 WorldStateMessage worldMsg;
-                worldMsg.tick = m_currentTick;
+                worldMsg.tick = m_currentTick; // Gets the current tick to send with message for interpolation and lag compensation
+                // Loops through all entities and adds their position to the 'WorldStateMessage' 
                 for (auto const& pair : m_entityStates) 
                     worldMsg.entityPositions[pair.first] = pair.second.position;
 
                 std::vector<uint8_t> bytes = worldMsg.serialise();
 
-                broadcastMessage(bytes, nullptr);
+                broadcastMessage(bytes, nullptr); // Sends the message to everyone, hence nullptr sender ID
             }
 
             WorldSnapshot snap;
-            snap.tick = m_currentTick;
+            snap.tick = m_currentTick; // Gets the current tick for the 'WorldSnapshot' for lag compensation
 
+            // Loops through all entities adding their position to the 'WorldSnapshot'
             for (auto const& pair : m_entityStates)
             {
                 int32_t id = pair.first;
@@ -209,16 +220,19 @@ void GameServer::simulationLoop()
                 snap.positions[id] = state.position;
             }
 
-            m_history.push_back(snap);
+            m_history.push_back(snap); // Pushes the current tick's entity positions to the history
 
+            // Checks if the max history is reached, if so removes the oldest
             if (m_history.size() > MAX_HISTORY_TICKS)
                 m_history.pop_front();
         }
 
-        auto end_time = std::chrono::steady_clock::now();
-        auto elapsed = end_time - start_time;
-        if (elapsed < tick_duration) 
-            std::this_thread::sleep_for(tick_duration - elapsed);
+        // Calculates the elapsed time using the start time from the top of the loop
+        auto endTime = std::chrono::steady_clock::now();
+        auto elapsed = endTime - startTime;
+        // If the tick processed faster than target duration; sleep for the remainder to make up for it
+        if (elapsed < tickDuration) 
+            std::this_thread::sleep_for(tickDuration - elapsed);
     }
 }
 
