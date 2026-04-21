@@ -75,7 +75,7 @@ void GameServer::tcpStart()
 
 			// Initialises the player's state in the authoritative server state
             {
-                std::lock_guard<std::mutex> state_lock(m_stateMutex);
+                std::lock_guard<std::mutex> stateLock(m_stateMutex);
                 EntityState newState;
                 newState.position = sf::Vector2f(0.0f, 0.0f);
                 newState.type = EntityType::PLAYER;
@@ -236,61 +236,72 @@ void GameServer::simulationLoop()
     }
 }
 
-// Loop around, receive messages from client and send them to all
-// the other connected clients.
-void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t my_id)
+// Runs in its own thread for each client, responsible for receiving messages from said client and processing them
+void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t clientId)
 {
-    // RECEIVING
-    while (true)
+    // Loop waiting for messages from clients, blocks until type ID is received; then determines message type and size and processes it
+    while (m_running)
     {
-        uint8_t type_byte;
-        size_t received;
+        uint8_t typeByte; // Message type ID
+        size_t received; // Used to check if the whole message was received
 
-        sf::Socket::Status status = client->receive(&type_byte, 1, received);
+        sf::Socket::Status status = client->receive(&typeByte, 1, received); // Blocking call waiting till the message type ID is received
+        // Check to ensure the client is still properly connected
         if (status == sf::Socket::Disconnected || status == sf::Socket::Error) 
         {
-            std::cerr << "Client Disconnected!" << std::endl;
+            std::cerr << "Client " << clientId << " Disconnected!";
             break;
         }
 
+        // Checks if the message type ID was received, so it can be processed
         if (received == 1) 
         {
-            GameMessageType type = static_cast<GameMessageType>(type_byte);
-            size_t remaining_size = 0;
+            GameMessageType type = static_cast<GameMessageType>(typeByte); // Assigns a message type based on the ID
+            size_t remainingSize = 0; // Pre-defines the exact byte length to expect for the rest of the payload, to avoid overflows
 
+            // Assigns payload size based on type IDs
             if (type == GameMessageType::PLAYER_MOVE) 
-                remaining_size = MOVE_PAYLOAD_SIZE;
+                remainingSize = MOVE_PAYLOAD_SIZE;
             else if (type == GameMessageType::PLAYER_ATTACK) 
-                remaining_size = ATTACK_PAYLOAD_SIZE;
+                remainingSize = ATTACK_PAYLOAD_SIZE;
             else if (type == GameMessageType::MAP_DATA)
-                remaining_size = MAP_DATA_SIZE;
+                remainingSize = MAP_DATA_SIZE;
             else 
             {
-                std::cerr << "Unknown message type received: " << (int)type_byte << std::endl;
+                std::cerr << "Unknown message type received: " << (int)typeByte << std::endl;
                 break;
             }
 
-            std::vector<uint8_t> full_packet(remaining_size + 1);
-            full_packet[0] = type_byte;
+            // Allocate a buffer for the complete payload, plus one for the type ID that was already consumed
+            std::vector<uint8_t> fullPacket(remainingSize + 1);
+            fullPacket[0] = typeByte; // Puts the ID back to the front
 
-            status = client->receive(&full_packet[1], remaining_size, received);
+            status = client->receive(&fullPacket[1], remainingSize, received); // Blocking call that reads the message after the header
 
-            if (status == sf::Socket::Done) 
+            // Checks a message is received, and its the expected size
+            if (status == sf::Socket::Done && received == remainingSize) 
             {
-                auto msg = GameMessageFactory::create(full_packet);
+                auto msg = GameMessageFactory::create(fullPacket); // The factory deserialises the messages so they can be processed
 
+                // If the message was successfully recognised
                 if (msg) 
                 {
+                    // ------------------------------------------------
+                    // Checks the message type and processes it
+                    // Downcasts generic message pointer to access specific message variables
+                    // ------------------------------------------------
+
                     if (msg->type == GameMessageType::PLAYER_MOVE) 
                     {
                         auto move = static_cast<PlayerMoveMessage*>(msg.get());
                         {
                             sf::Vector2f startPos;
-                            MapGrid mapCopy;
+                            MapGrid mapCopy; // Used to temporarily avoid players, so they're not marked as permanent obstacles
+                            // Gathers a snapshot of data for pathfinding: start position and collision grid (avoiding other entities)
                             {
-                                std::lock_guard<std::mutex> state_lock(m_stateMutex);
+                                std::lock_guard<std::mutex> stateLock(m_stateMutex);
 
-                                if (m_entityStates.find(move->id) == m_entityStates.end()) return;
+                                if (m_entityStates.find(move->id) == m_entityStates.end()) return; // Checks ID is valid
 
                                 // If position is 0, 0; this is the first move message so set their position directly without pathfinding
                                 if (m_entityStates[move->id].position.x == 0.0f && m_entityStates[move->id].position.y == 0.0f)
@@ -298,37 +309,46 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t my_
                                     m_entityStates[move->id].position = sf::Vector2f(move->posX, move->posY);
                                     std::cout << "Initial sync: Player " << move->id << " teleported to " << move->posX << ", " << move->posY << std::endl;
 
-                                    broadcastMessage(full_packet, client);
+                                    broadcastMessage(fullPacket, client);
                                     continue;
                                 }
 
+                                // Checks whether they're currently moving and have a path, if so their start position becomes the node they're walking towards
+                                // Done so the pathfinding grid is always aligned to the centre of a tile
+                                // If not, they're stationary and should be in the centre of a tile
                                 startPos = (m_entityStates[move->id].isMoving && !m_entityStates[move->id].currentPath.empty())
-                                    ? m_entityStates[move->id].currentPath.front() : m_entityStates[move->id].position;
+                                 ? m_entityStates[move->id].currentPath.front() : m_entityStates[move->id].position;
 
-                                mapCopy = m_currentMap;
+                                mapCopy = m_currentMap; // Takes a snapshot of the map's current state
 
+                                // Loops through all other entities and turns them into obstacles, to be pathfound around
                                 for (const auto& pair : m_entityStates)
                                 {
-                                    if (pair.first != move->id && pair.second.type == EntityType::PLAYER)
+                                    // Check to ensure client isn't marked as an obstacle for themself
+                                    if (pair.first != move->id)
                                     {
+                                        // Snaps to int coords
                                         int px = static_cast<int>(pair.second.position.x);
                                         int py = static_cast<int>(pair.second.position.y);
 
+                                        // Safety check to ensure coords are within map boundaries
                                         if (px >= 0 && px < mapCopy.width && py >= 0 && py < mapCopy.height)
                                             mapCopy.collision[py * mapCopy.width + px] = true;
                                     }
                                 }
                             }
 
-                            auto truePath = Pathfinding::findPath((int)startPos.x, (int)startPos.y, (int)move->posX, (int)move->posY, 
-                                mapCopy.collision, mapCopy.width, mapCopy.height);
+                            // True authoritative server path
+                            auto truePath = Pathfinding::findPath((int)startPos.x, (int)startPos.y, (int)move->posX, (int)move->posY, mapCopy.collision, mapCopy.width, mapCopy.height);
                             
+                            // Checks whether a path was found
                             if (!truePath.empty())
                             {
-                                std::lock_guard<std::mutex> state_lock(m_stateMutex);
+                                std::lock_guard<std::mutex> stateLock(m_stateMutex);
+                                // Checks ID is valid
                                 if (m_entityStates.find(move->id) != m_entityStates.end())
                                 {
-                                    m_entityStates[move->id].currentPath = truePath;
+                                    m_entityStates[move->id].currentPath = truePath; // Overrides current path with the true authoritative path
                                     m_entityStates[move->id].isMoving = true;
                                 }
                             }
@@ -346,26 +366,25 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t my_
                     {
                         auto mapMsg = static_cast<MapDataMessage*>(msg.get());
                         {
-                            std::lock_guard<std::mutex> state_lock(m_stateMutex);
+                            std::lock_guard<std::mutex> stateLock(m_stateMutex);
                             m_currentMap.width = mapMsg->width;
                             m_currentMap.height = mapMsg->height;
                             m_currentMap.collision.clear();
-                            for (uint8_t b : mapMsg->grid) {
+                            for (uint8_t b : mapMsg->grid) 
                                 m_currentMap.collision.push_back(b == 1);
-                            }
                         }
                         std::cout << "Server received Map Data: " << mapMsg->width << "x" << mapMsg->height << std::endl;
                     }
 
-                    broadcastMessage(full_packet, client);
+                    broadcastMessage(fullPacket, client);
                 }
             }
         }
     }
 
     {
-        std::lock_guard<std::mutex> state_lock(m_stateMutex);
-        m_entityStates.erase(my_id);
+        std::lock_guard<std::mutex> stateLock(m_stateMutex);
+        m_entityStates.erase(clientId);
     }
 
     std::lock_guard<std::mutex> lock(m_clientsMutex);
