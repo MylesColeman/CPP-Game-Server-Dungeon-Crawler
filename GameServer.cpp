@@ -360,38 +360,41 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
                     else if (msg->type == GameMessageType::PLAYER_ATTACK) 
                     {
                         auto attack = static_cast<PlayerAttackMessage*>(msg.get());
-                        processAttack(attack->id, attack->tick);
+                        processAttack(attack->id, attack->tick); // Processes attack, collision checking, with lag compensation
                     }
                     else if (msg->type == GameMessageType::MAP_DATA)
                     {
                         auto mapMsg = static_cast<MapDataMessage*>(msg.get());
+                        // Updates the server's map data with that which the client sends
                         {
                             std::lock_guard<std::mutex> stateLock(m_stateMutex);
                             m_currentMap.width = mapMsg->width;
                             m_currentMap.height = mapMsg->height;
                             m_currentMap.collision.clear();
-                            for (uint8_t b : mapMsg->grid) 
-                                m_currentMap.collision.push_back(b == 1);
+                            // Clears the old collision data, and updates it with the new just received one
+                            for (uint8_t cell : mapMsg->grid) 
+                                m_currentMap.collision.push_back(cell == 1); // Checks if cell is an obstacle
                         }
                         std::cout << "Server received Map Data: " << mapMsg->width << "x" << mapMsg->height << std::endl;
                     }
 
-                    broadcastMessage(fullPacket, client);
+                    broadcastMessage(fullPacket, client); // Sends the message to all OTHER clients
                 }
             }
         }
     }
 
+    // Clears the processed entity from the game world, as the server is no longer running or the client has disconnected 
     {
         std::lock_guard<std::mutex> stateLock(m_stateMutex);
         m_entityStates.erase(clientId);
     }
 
     std::lock_guard<std::mutex> lock(m_clientsMutex);
-    m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), client), m_clients.end());
+    m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), client), m_clients.end()); // Removes the client's socket from the broadcast list, cleanly
 }
 
-// Sends `message` from `sender` to all the other connected clients
+// Sends a message from the server to all connected clients except the sender (if specified)
 void GameServer::broadcastMessage(const std::vector<uint8_t>& message, std::shared_ptr<sf::TcpSocket> sender)
 {
     // You might want to validate the message before you send it.
