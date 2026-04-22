@@ -397,7 +397,7 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
 // Sends a message from the server to all connected clients except the sender (if specified)
 void GameServer::broadcastMessage(const std::vector<uint8_t>& message, std::shared_ptr<sf::TcpSocket> sender)
 {
-    std::lock_guard<std::mutex> lock(m_clientsMutex);
+    std::lock_guard<std::mutex> lock(m_clientsMutex); // Protects the client list 
     // Loops through all connected clients
     for (auto& client : m_clients)
     {
