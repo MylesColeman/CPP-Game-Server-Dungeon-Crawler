@@ -557,7 +557,14 @@ void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
 
         // Compares square values to determine whether entity was in range of attack
         if (distanceSquared <= rangeSquared)
+        {
+            liveEntity->second.health -= 1;
+
+            EntityDamagedMessage dmgMsg(targetId, liveEntity->second.health);
+            broadcastMessage(dmgMsg.serialise(), nullptr); // Broadcasts the message to all connected clients, so everyone's UI updates
+
             std::cout << "HIT! Player " << targetId << " was in range at tick " << historicalTick << std::endl;
+        }   
         else
             std::cout << "MISS: Player " << targetId << " was too far away at tick " << historicalTick << std::endl;
     }

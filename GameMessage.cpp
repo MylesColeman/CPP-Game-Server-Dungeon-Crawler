@@ -42,6 +42,19 @@ std::vector<uint8_t> WorldStateMessage::serialise() const
     return packet;
 }
 
+std::vector<uint8_t> EntityDamagedMessage::serialise() const
+{
+    std::vector<uint8_t> buffer(9); 
+
+    buffer[0] = static_cast<uint8_t>(type); // Adds the message type id to the buffer
+
+    // Adds the ID and the health to the packet
+    std::memcpy(&buffer[1], &targetId, 4);
+    std::memcpy(&buffer[5], &currentHealth, 4);
+
+    return buffer;
+}
+
 // Creates 'GameMessage's from incoming vector of bytes (technically ints of 8 bit size)
 std::unique_ptr<GameMessage> GameMessageFactory::create(const std::vector<uint8_t>& bytes)
 {

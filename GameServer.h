@@ -39,6 +39,7 @@ struct EntityState
     bool isMoving = false;
     float speed = 5.f;
     sf::Clock attackTimer;
+    int32_t health = 3;
 };
 
 class GameServer 
@@ -54,6 +55,7 @@ public:
     static constexpr size_t ENTITY_DATA_SIZE = 12; // Int(4) + Float(4) + Float(4)
     static constexpr size_t MOVE_PAYLOAD_SIZE = 12; // Int(4) + Float(4) + Float(4)
     static constexpr size_t ATTACK_PAYLOAD_SIZE = 8; // Int(4) + Int(4)
+    static constexpr size_t DAMAGE_PAYLOAD_SIZE = 8; // Int(4) + Int(4)
 
 	// Simulation and Broadcast Settings
     static constexpr float DELTA_TIME = 1.0f / 60.0f;

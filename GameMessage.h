@@ -14,7 +14,8 @@ enum class GameMessageType : uint8_t
     PLAYER_MOVE = 1,
     PLAYER_ATTACK = 2,
     MAP_DATA = 3,
-    WORLD_STATE = 4
+    WORLD_STATE = 4,
+    ENTITY_DAMAGED = 5
 };
 
 // Defines game messages
@@ -80,6 +81,21 @@ class WorldStateMessage : public GameMessage
         WorldStateMessage() 
         {
             type = GameMessageType::WORLD_STATE; 
+        }
+
+        std::vector<uint8_t> serialise() const;
+};
+
+//Entity Damaged - sends the updated health
+class EntityDamagedMessage : public GameMessage
+{
+    public:
+        int32_t targetId; // Entity to update
+        int32_t currentHealth; // New health
+
+        EntityDamagedMessage(int32_t id, int32_t health) : targetId(id), currentHealth(health)
+        {
+            type = GameMessageType::ENTITY_DAMAGED;
         }
 
         std::vector<uint8_t> serialise() const;
