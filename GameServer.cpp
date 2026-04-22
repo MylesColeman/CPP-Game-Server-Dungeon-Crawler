@@ -209,11 +209,41 @@ void GameServer::simulationLoop()
                     // Entity will overshoot movement this tick, just snap them
                     if (distSq <= moveStepSq)
                     {
-                        state.position = target;
-                        state.currentPath.erase(state.currentPath.begin());
+                        bool isNodeOccupied = false; // Occupied by entity
 
-                        if (state.currentPath.empty()) 
+                        // Loops through all active entities
+                        for (auto const& other : m_entityStates) 
+                        {
+                            if (other.first == pair.first) continue; // Ignore self for pathfinding
+
+                            // Gets the distance from the other entity to the target
+                            float odx = other.second.position.x - target.x;
+                            float ody = other.second.position.y - target.y;
+
+                            // Within node's bounds, i.e. node is occupied
+                            if ((odx * odx) + (ody * ody) < 0.1f)
+                            {
+                                isNodeOccupied = true;
+                                break;
+                            }
+                        }
+
+                        // If the node is occupied break from current path
+                        if (isNodeOccupied)
+                        {
+                            state.position = sf::Vector2f(std::floor(state.position.x) + 0.5f, std::floor(state.position.y) + 0.5f); // Centre's entity to the tile they're currently leaving
+
+                            state.currentPath.clear();
                             state.isMoving = false;
+                        }
+                        else // Current path is fine
+                        {
+                            state.position = target;
+                            state.currentPath.erase(state.currentPath.begin());
+
+                            if (state.currentPath.empty()) 
+                                state.isMoving = false;
+                        }
                     }
                     else // Standard movement 
                     {
