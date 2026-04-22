@@ -308,6 +308,7 @@ void GameServer::simulationLoop()
 void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t clientId)
 {
     sf::Clock rateLimitClock; // Clock to track transmission rate
+    bool isFirstAction = true; // For initial player sync, tp to spawn pos
 
     // Loop waiting for messages from clients, blocks until type ID is received; then determines message type and size and processes it
     while (m_running)
@@ -351,8 +352,19 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
             // Checks a message is received, and its the expected size
             if (status == sf::Socket::Done && received == remainingSize) 
             {
-                if (rateLimitClock.getElapsedTime().asSeconds() < NETWORK_RATE_LIMIT) continue; // Enforces a time delay between packets
-                rateLimitClock.restart();
+                // Only rate limits action messages
+                if (type == GameMessageType::PLAYER_MOVE || type == GameMessageType::PLAYER_ATTACK)
+                {
+                    // Checks whether this is the first action, if so ignores the network rate limit; otherwise enforces a time delay between packets
+                    if (isFirstAction)
+                    {
+                        isFirstAction = false;
+                        rateLimitClock.restart();
+                    }
+                    else if (rateLimitClock.getElapsedTime().asSeconds() < NETWORK_RATE_LIMIT) continue;
+                    else 
+                        rateLimitClock.restart();
+                }
 
                 auto msg = GameMessageFactory::create(fullPacket); // The factory deserialises the messages so they can be processed
 
