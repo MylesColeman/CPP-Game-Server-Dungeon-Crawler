@@ -65,7 +65,7 @@ public:
     static constexpr float ATTACK_COOLDOWN = 0.5f;
     static constexpr float ATTACK_RANGE = 2.0f;
 
-	GameServer(unsigned short tcp_port, unsigned short udp_port); // Constructor initialises the server with specified TCP and UDP ports and starts the simulation loop in a detached thread
+	GameServer(unsigned short tcpPort, unsigned short udpPort); // Constructor initialises the server with specified TCP and UDP ports and starts the simulation loop in a detached thread
     // Starts the TCP server, binds to the specified port, and listens for incoming client connections
 	// For each accepted client connection, a new thread is spawned to handle communication with that client - so that one client doesn't lag others
 	// It also assigns a unique ID to each client and initialises their player state in the authoritative server state
@@ -95,14 +95,14 @@ private:
 	std::mutex m_stateMutex; // Mutex to protect access to the entity states and world history
 
     // Runs in its own thread for each client, responsible for receiving messages from said client and processing them
-	void handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t my_id);
+	void handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t clientId);
     // Sends a message from the server to all connected clients except the sender (if specified)
 	void broadcastMessage(const std::vector<uint8_t>& message, std::shared_ptr<sf::TcpSocket> sender); 
 
     // Processes an attack action from a player 
     // Checking for cooldowns and determining if anything was hit
     // Based on their positions in the historical snapshot of the world at the time of the attack
-	void processAttack(int32_t attacker_id, uint32_t historical_tick); 
+	void processAttack(int32_t attackerId, uint32_t historicalTick); 
 };
 
 #endif
