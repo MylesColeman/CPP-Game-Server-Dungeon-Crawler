@@ -221,7 +221,7 @@ void GameServer::simulationLoop()
                             float ody = other.second.position.y - target.y;
 
                             // Within node's bounds, i.e. node is occupied
-                            if ((odx * odx) + (ody * ody) < 0.1f)
+                            if ((odx * odx) + (ody * ody) < 0.001f)
                             {
                                 isNodeOccupied = true;
                                 break;
@@ -231,7 +231,14 @@ void GameServer::simulationLoop()
                         // If the node is occupied break from current path
                         if (isNodeOccupied)
                         {
-                            state.position = sf::Vector2f(std::floor(state.position.x) + 0.5f, std::floor(state.position.y) + 0.5f); // Centre's entity to the tile they're currently leaving
+                            float dx = state.position.x - target.x;
+                            float dy = state.position.y - target.y;
+
+                            // Centre's entity to the tile they're currently leaving
+                            if (std::abs(dx) > std::abs(dy)) 
+                                state.position = sf::Vector2f(target.x + (dx > 0 ? 1.0f : -1.0f), target.y);
+                            else 
+                                state.position = sf::Vector2f(target.x, target.y + (dy > 0 ? 1.0f : -1.0f));       
 
                             state.currentPath.clear();
                             state.isMoving = false;
@@ -309,7 +316,7 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
         // Check to ensure the client is still properly connected
         if (status == sf::Socket::Disconnected || status == sf::Socket::Error) 
         {
-            std::cerr << "Client " << clientId << " Disconnected!";
+            std::cerr << "Client " << clientId << " Disconnected!" << std::endl;
             break;
         }
 
