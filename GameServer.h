@@ -73,6 +73,8 @@ public:
 	// Starts the UDP server, binds to the specified port, and enters a loop to receive messages from clients and send responses back
     // This is used to echo client pings so they can discover the server's local IP address to connect to the TCP server
     void udpStart();
+    // Used to gracefully shut down the server
+    void stopServer();
 private:
     bool m_running = true; // Flag to control the main server loop and allow for graceful shutdown
 

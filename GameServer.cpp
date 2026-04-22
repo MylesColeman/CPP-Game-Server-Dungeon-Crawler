@@ -55,43 +55,55 @@ void GameServer::tcpStart()
 
     std::cout << "TCP Server is listening to port " << m_tcpPort << ", waiting for connections..." << std::endl;
 
+    // Selector to prevent permenant blocking when listening for connection
+    sf::SocketSelector selector;
+    selector.add(listener);
+
 	// Loop for incoming client connections
     while (m_running)
     {
-        auto client = std::make_shared<sf::TcpSocket>();
-        // A blocking call that waits until a client connects; done so that we don't consume CPU cycles when there are no incoming connections
-		status = listener.accept(*client); 
-		// If the connection is accepted successfully, 
-        // the server assigns a unique ID to the client, initialises their player state, and starts a new thread to handle communication with that client
-        if (status == sf::Socket::Status::Done)
+        // Waits up to 100ms for a connection, if unsuccessful it unblocks and continues the loop
+        if (selector.wait(sf::milliseconds(100)))
         {
-            int32_t assignedId;
-			// Assigns a unique ID to the client and adds them to the list of connected clients
+            // If the selector was triggered a client is trying to connect
+            if (selector.isReady(listener))
             {
-                std::lock_guard<std::mutex> lock(m_clientsMutex);
-                assignedId = m_nextId++;
-                m_clients.push_back(client);
+                auto client = std::make_shared<sf::TcpSocket>();
+                // A blocking call that waits until a client connects; done so that we don't consume CPU cycles when there are no incoming connections
+		        status = listener.accept(*client); 
+		        // If the connection is accepted successfully, 
+                // the server assigns a unique ID to the client, initialises their player state, and starts a new thread to handle communication with that client
+                if (status == sf::Socket::Status::Done)
+                {
+                    int32_t assignedId;
+			        // Assigns a unique ID to the client and adds them to the list of connected clients
+                    {
+                        std::lock_guard<std::mutex> lock(m_clientsMutex);
+                        assignedId = m_nextId++;
+                        m_clients.push_back(client);
+                    }
+
+			        // Initialises the player's state in the authoritative server state
+                    {
+                        std::lock_guard<std::mutex> stateLock(m_stateMutex);
+                        EntityState newState;
+                        newState.position = sf::Vector2f(0.0f, 0.0f);
+                        newState.type = EntityType::PLAYER;
+                        newState.speed = 5.0f;
+                        m_entityStates[assignedId] = newState;
+                    }
+
+                    std::cout << "New client connected: " << client->getRemoteAddress() << std::endl;
+			        status = client->send(&assignedId, sizeof(int32_t)); // Send the assigned ID to the client so they know their unique identifier in the game
+
+			        // If the server fails to send the assigned ID to the client, an error message is printed
+                    if (status != sf::Socket::Status::Done)
+                        std::cerr << "Could not send ID to client " << assignedId << std::endl;
+
+                    // Start a new thread to handle communication with the client, decoupled from the main server loop so that one slow client doesn't affect others
+			        std::thread(&GameServer::handleClient, this, client, assignedId).detach(); 
+                }
             }
-
-			// Initialises the player's state in the authoritative server state
-            {
-                std::lock_guard<std::mutex> stateLock(m_stateMutex);
-                EntityState newState;
-                newState.position = sf::Vector2f(0.0f, 0.0f);
-                newState.type = EntityType::PLAYER;
-                newState.speed = 5.0f;
-                m_entityStates[assignedId] = newState;
-            }
-
-            std::cout << "New client connected: " << client->getRemoteAddress() << std::endl;
-			status = client->send(&assignedId, sizeof(int32_t)); // Send the assigned ID to the client so they know their unique identifier in the game
-
-			// If the server fails to send the assigned ID to the client, an error message is printed
-            if (status != sf::Socket::Status::Done)
-                std::cerr << "Could not send ID to client " << assignedId << std::endl;
-
-            // Start a new thread to handle communication with the client, decoupled from the main server loop so that one slow client doesn't affect others
-			std::thread(&GameServer::handleClient, this, client, assignedId).detach(); 
         }
     }
 }
@@ -112,36 +124,54 @@ void GameServer::udpStart()
 
     std::cout << "UDP Server started on port " << m_udpPort << std::endl;
 
+    // Selector to prevent permenant blocking when listening for pings
+    sf::SocketSelector selector;
+    selector.add(socket);
+
 	// UDP is connectionless, so we just loop around receiving messages from any client and sending responses back to the sender
     while (m_running) 
     {
-		// Message Buffer and Sender Info
-        char data[1024]; // Typical safe size for small UDP packets
-		std::size_t received; // Actual size of the received data
-        sf::IpAddress sender;
-        unsigned short senderPort;
-
-		// Attemps to receive a message from any client; this is a blocking call that waits until a message is received
-        // Done so that we don't consume CPU cycles when there are no incoming messages
-        status = socket.receive(data, sizeof(data), received, sender, senderPort);
-		// If the server fails to receive data, an error message is printed and the loop continues to wait for the next message
-        if (status != sf::Socket::Status::Done) 
+        // Waits up to 100ms for a ping, if unsuccessful it unblocks and continues the loop
+        if (selector.wait(sf::milliseconds(100)))
         {
-            std::cerr << "Error receiving data" << std::endl;
-            continue;
+            // If the selector was triggered a client is trying to send something
+            if (selector.isReady(socket))
+            {
+                // Message Buffer and Sender Info
+                char data[1024]; // Typical safe size for small UDP packets
+		        std::size_t received; // Actual size of the received data
+                sf::IpAddress sender;
+                unsigned short senderPort;
+
+		        // Attemps to receive a message from any client; this is a blocking call that waits until a message is received
+                // Done so that we don't consume CPU cycles when there are no incoming messages
+                status = socket.receive(data, sizeof(data), received, sender, senderPort);
+		        // If the server fails to receive data, an error message is printed and the loop continues to wait for the next message
+                if (status != sf::Socket::Status::Done) 
+                {
+                    std::cerr << "Error receiving data" << std::endl;
+                    continue;
+                }
+
+                std::cout << "Received: " << data << " from " << sender << ":" << senderPort << std::endl;
+
+		        // Echo the received message back to the sender; this allows clients to discover the server's local IP address
+                status = socket.send(data, received, sender, senderPort);
+		        // If the server fails to send the response back to the client, an error message is printed
+                if (status != sf::Socket::Status::Done) 
+                    std::cerr << "Error sending data" << std::endl;
+            }
         }
-
-        std::cout << "Received: " << data << " from " << sender << ":" << senderPort << std::endl;
-
-		// Echo the received message back to the sender; this allows clients to discover the server's local IP address
-        status = socket.send(data, received, sender, senderPort);
-		// If the server fails to send the response back to the client, an error message is printed
-        if (status != sf::Socket::Status::Done) 
-            std::cerr << "Error sending data" << std::endl;
     }
 
 	socket.unbind(); // Unbind the socket when done, no longer accepting messages
     std::cout << "UDP Discovery: Thread terminated safely." << std::endl;
+}
+
+// Used to gracefully shut down the server
+void GameServer::stopServer()
+{
+    m_running = false;
 }
 
 // Main loop that updates the game state at a fixed tick rate, processes player actions, and broadcasts world state to clients
