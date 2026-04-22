@@ -397,21 +397,15 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
 // Sends a message from the server to all connected clients except the sender (if specified)
 void GameServer::broadcastMessage(const std::vector<uint8_t>& message, std::shared_ptr<sf::TcpSocket> sender)
 {
-    // You might want to validate the message before you send it.
-    // A few reasons for that:
-    // 1. Make sure the message makes sense in the game.
-    // 2. Make sure the sender is not cheating.
-    // 3. First need to synchronise the players inputs (usually done in Lockstep).
-    // 4. Compensate for latency and perform rollbacks (usually done in Ded Reckoning).
-    // 5. Delay the sending of messages to make the game fairer wrt high ping players.
-    // This is where you can write the authoritative part of the server.
     std::lock_guard<std::mutex> lock(m_clientsMutex);
+    // Loops through all connected clients
     for (auto& client : m_clients)
     {
+        // Only broadcasts to OTHER clients, not the sender
         if (client != sender)
         {
-            // SENDING
-            sf::Socket::Status status = client->send(message.data(), message.size());
+            sf::Socket::Status status = client->send(message.data(), message.size()); // Sends the broadcast message
+            // If the server fails to send the broadcast, an error message is printed
             if (status != sf::Socket::Status::Done)
                 std::cerr << "Error sending message to client" << std::endl;
         }
