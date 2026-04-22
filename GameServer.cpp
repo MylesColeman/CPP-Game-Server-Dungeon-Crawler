@@ -417,7 +417,7 @@ void GameServer::broadcastMessage(const std::vector<uint8_t>& message, std::shar
 // Based on their positions in the historical snapshot of the world at the time of the attack
 void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
 {
-    // Attack processed in a mutex to not affect the other client states
+    // Attack processed in a mutex to not affect the other client states and prevent race conditions
     std::lock_guard<std::mutex> lock(m_stateMutex);
 
     auto it = m_entityStates.find(attackerId);
@@ -435,7 +435,7 @@ void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
         // Reverses through the list, starting with the latest history
         for (auto rit = m_history.rbegin(); rit != m_history.rend(); ++rit) 
         {
-            // 
+            // Finds the most accurate tick that is stored, compared against the client's claimed time of attack
             if (rit->tick <= historicalTick) 
             {
                 targetSnap = *rit; // Sets the target tick to the correct historical tick
@@ -446,7 +446,7 @@ void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
     else 
         return; // Server just booted, no history available
 
-    if (targetSnap.positions.find(attackerId) == targetSnap.positions.end()) return; // Checks if the entity's position is valid
+    if (targetSnap.positions.find(attackerId) == targetSnap.positions.end()) return; // Checks if the entity's position is valid during the historical snapshot
     sf::Vector2f attackerPos = targetSnap.positions[attackerId]; // Rolls back the attack position to the appropriate historical tick
 
     std::cout << "Player " << attackerId << " attacked at tick " << historicalTick << " from " << attackerPos.x << ", " << attackerPos.y << std::endl;
