@@ -63,6 +63,9 @@ public:
     static constexpr int BROADCAST_INTERVAL = 6;
     static constexpr size_t MAX_HISTORY_TICKS = 30;
     static constexpr float NETWORK_RATE_LIMIT = 0.05f; // One message every 50ms
+
+    // Connection Limits
+    static constexpr size_t MAX_PLAYERS = 2;
     
     // Player Attack Variables
     static constexpr float ATTACK_COOLDOWN = 0.5f;

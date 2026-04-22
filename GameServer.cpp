@@ -80,6 +80,13 @@ void GameServer::tcpStart()
 			        // Assigns a unique ID to the client and adds them to the list of connected clients
                     {
                         std::lock_guard<std::mutex> lock(m_clientsMutex);
+
+                        if (m_clients.size() >= MAX_PLAYERS)
+                        {
+                            std::cout << "Rejected connection from " << client->getRemoteAddress() << ". Server is full!" << std::endl;
+                            continue;
+                        }
+
                         assignedId = m_nextId++;
                         m_clients.push_back(client);
                     }
