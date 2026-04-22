@@ -413,32 +413,34 @@ void GameServer::broadcastMessage(const std::vector<uint8_t>& message, std::shar
             // SENDING
             sf::Socket::Status status = client->send(message.data(), message.size());
             if (status != sf::Socket::Status::Done)
-            {
                 std::cerr << "Error sending message to client" << std::endl;
-            }
         }
     }
 }
 
-void GameServer::processAttack(int32_t attacker_id, uint32_t historical_tick)
+// Processes an attack action from a player 
+// Checking for cooldowns and determining if anything was hit
+// Based on their positions in the historical snapshot of the world at the time of the attack
+void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
 {
     std::lock_guard<std::mutex> lock(m_stateMutex);
 
-    auto it = m_entityStates.find(attacker_id);
+    auto it = m_entityStates.find(attackerId);
     if (it == m_entityStates.end()) return;
 
     if (it->second.attackTimer.getElapsedTime().asSeconds() < ATTACK_COOLDOWN) return;
     it->second.attackTimer.restart();
 
-    WorldSnapshot target_snap;
-    if (!m_history.empty()) {
-        target_snap = m_history.back();
+    WorldSnapshot targetSnap;
+    if (!m_history.empty()) 
+    {
+        targetSnap = m_history.back();
 
         for (auto rit = m_history.rbegin(); rit != m_history.rend(); ++rit) 
         {
-            if (rit->tick <= historical_tick) 
+            if (rit->tick <= historicalTick) 
             {
-                target_snap = *rit;
+                targetSnap = *rit;
                 break;
             }
         }
@@ -446,34 +448,34 @@ void GameServer::processAttack(int32_t attacker_id, uint32_t historical_tick)
     else 
         return; // Server just booted, no history available
 
-    if (target_snap.positions.find(attacker_id) == target_snap.positions.end()) return;
-    sf::Vector2f attacker_pos = target_snap.positions[attacker_id];
+    if (targetSnap.positions.find(attackerId) == targetSnap.positions.end()) return;
+    sf::Vector2f attackerPos = targetSnap.positions[attackerId];
 
-    std::cout << "Player " << attacker_id << " attacked at tick " << historical_tick << " from " << attacker_pos.x << ", " << attacker_pos.y << std::endl;
+    std::cout << "Player " << attackerId << " attacked at tick " << historicalTick << " from " << attackerPos.x << ", " << attackerPos.y << std::endl;
 
-    for (const auto& pair : target_snap.positions) 
+    for (const auto& pair : targetSnap.positions) 
     {
-        int32_t target_id = pair.first;
-        if (target_id == attacker_id) continue;
+        int32_t targetId = pair.first;
+        if (targetId == attackerId) continue;
 
-        auto live_entity = m_entityStates.find(target_id);
-        if (live_entity == m_entityStates.end() || live_entity->second.type == EntityType::PLAYER)
+        auto liveEntity = m_entityStates.find(targetId);
+        if (liveEntity == m_entityStates.end() || liveEntity->second.type == EntityType::PLAYER)
             continue;
 
-        sf::Vector2f target_pos = pair.second;
+        sf::Vector2f targetPos = pair.second;
 
-        float dx = attacker_pos.x - target_pos.x;
-        float dy = attacker_pos.y - target_pos.y;
+        float dx = attackerPos.x - targetPos.x;
+        float dy = attackerPos.y - targetPos.y;
         float distanceSquared = (dx * dx) + (dy * dy);
         float rangeSquared = ATTACK_RANGE * ATTACK_RANGE;
 
         if (distanceSquared <= rangeSquared)
         {
-            std::cout << "HIT! Player " << target_id << " was in range at tick " << historical_tick << std::endl;
+            std::cout << "HIT! Player " << targetId << " was in range at tick " << historicalTick << std::endl;
 
             // TODO: Broadcast an ENTITY_DAMAGED message
         }
         else
-            std::cout << "MISS: Player " << target_id << " was too far away at tick " << historical_tick << std::endl;
+            std::cout << "MISS: Player " << targetId << " was too far away at tick " << historicalTick << std::endl;
     }
 }
