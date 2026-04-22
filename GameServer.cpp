@@ -95,7 +95,7 @@ void GameServer::tcpStart()
                     {
                         std::lock_guard<std::mutex> stateLock(m_stateMutex);
                         EntityState newState;
-                        newState.position = sf::Vector2f(0.0f, 0.0f);
+                        newState.position = sf::Vector2f(-10.f, -10.f); // Off screen till spawn point is received
                         newState.type = EntityType::PLAYER;
                         newState.speed = 5.0f;
                         m_entityStates[assignedId] = newState;
@@ -222,7 +222,7 @@ void GameServer::simulationLoop()
                         // Loops through all active entities
                         for (auto const& other : m_entityStates) 
                         {
-                            if (other.first == pair.first) continue; // Ignore self for pathfinding
+                            if (other.first == pair.first || other.second.health <= 0) continue; // Ignore self for pathfinding and dead players
 
                             // Gets the distance from the other entity to the target
                             float odx = other.second.position.x - target.x;
@@ -395,8 +395,10 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
 
                                 if (m_entityStates.find(move->id) == m_entityStates.end()) return; // Checks ID is valid
 
-                                // If position is 0, 0; this is the first move message so set their position directly without pathfinding
-                                if (m_entityStates[move->id].position.x == 0.0f && m_entityStates[move->id].position.y == 0.0f)
+                                if (m_entityStates[move->id].health <= 0) return; // Ignore dead players
+
+                                // If position is -10, -10; this is the first move message so set their position directly without pathfinding
+                                if (m_entityStates[move->id].position.x == -10.f && m_entityStates[move->id].position.y == -10.f)
                                 {
                                     m_entityStates[move->id].position = sf::Vector2f(move->posX, move->posY);
                                     std::cout << "Initial sync: Player " << move->id << " teleported to " << move->posX << ", " << move->posY << std::endl;
@@ -416,8 +418,8 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
                                 // Loops through all other entities and turns them into obstacles, to be pathfound around
                                 for (const auto& pair : m_entityStates)
                                 {
-                                    // Check to ensure client isn't marked as an obstacle for themself
-                                    if (pair.first != move->id)
+                                    // Check to ensure client isn't marked as an obstacle for themself, and dead player's aren't avoided
+                                    if (pair.first != move->id && pair.second.health > 0)
                                     {
                                         // Snaps to int coords
                                         int px = static_cast<int>(pair.second.position.x);
@@ -441,7 +443,7 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
                                 if (m_entityStates.find(move->id) != m_entityStates.end())
                                 {
                                     m_entityStates[move->id].currentPath = truePath; // Overrides current path with the true authoritative path
-                                    m_entityStates[move->id].isMoving = true;
+                                    m_entityStates[move->id].isMoving = true; // Adds other client's players to the reserved set
                                 }
                             }
                             else
@@ -513,7 +515,7 @@ void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
     std::lock_guard<std::mutex> lock(m_stateMutex);
 
     auto it = m_entityStates.find(attackerId);
-    if (it == m_entityStates.end()) return; // Checks if the entity is valid
+    if (it == m_entityStates.end() || it->second.health <= 0) return; // Checks if the entity is valid and alive
 
     if (it->second.attackTimer.getElapsedTime().asSeconds() < ATTACK_COOLDOWN) return; // Checks if the cooldown has cleared
     it->second.attackTimer.restart(); // Cooldown cleared, restart it for the next attack
@@ -551,7 +553,7 @@ void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
 
         auto liveEntity = m_entityStates.find(targetId);
         // Checks that the entity is valid and not another player; friendly fire is disabled
-        if (liveEntity == m_entityStates.end() || liveEntity->second.type == EntityType::PLAYER)
+        if (liveEntity == m_entityStates.end() /*|| liveEntity->second.type == EntityType::PLAYER*/)
             continue;
 
         sf::Vector2f targetPos = pair.second;
