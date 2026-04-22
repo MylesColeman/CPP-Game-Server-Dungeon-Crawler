@@ -26,6 +26,7 @@ constexpr float GameServer::DELTA_TIME;
 constexpr float GameServer::TICK_RATE_MS;
 constexpr int GameServer::BROADCAST_INTERVAL;
 constexpr size_t GameServer::MAX_HISTORY_TICKS;
+constexpr float GameServer::NETWORK_RATE_LIMIT;
 
 // Player Attack Variables
 constexpr float GameServer::ATTACK_COOLDOWN;
@@ -306,6 +307,8 @@ void GameServer::simulationLoop()
 // Runs in its own thread for each client, responsible for receiving messages from said client and processing them
 void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t clientId)
 {
+    sf::Clock rateLimitClock; // Clock to track transmission rate
+
     // Loop waiting for messages from clients, blocks until type ID is received; then determines message type and size and processes it
     while (m_running)
     {
@@ -348,6 +351,9 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
             // Checks a message is received, and its the expected size
             if (status == sf::Socket::Done && received == remainingSize) 
             {
+                if (rateLimitClock.getElapsedTime().asSeconds() < NETWORK_RATE_LIMIT) continue; // Enforces a time delay between packets
+                rateLimitClock.restart();
+
                 auto msg = GameMessageFactory::create(fullPacket); // The factory deserialises the messages so they can be processed
 
                 // If the message was successfully recognised
