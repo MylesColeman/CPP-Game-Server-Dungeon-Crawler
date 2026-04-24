@@ -553,7 +553,7 @@ void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
 
         auto liveEntity = m_entityStates.find(targetId);
         // Checks that the entity is valid and not another player; friendly fire is disabled
-        if (liveEntity == m_entityStates.end() /*|| liveEntity->second.type == EntityType::PLAYER*/)
+        if (liveEntity == m_entityStates.end() || liveEntity->second.type == EntityType::PLAYER)
             continue;
 
         sf::Vector2f targetPos = pair.second;
