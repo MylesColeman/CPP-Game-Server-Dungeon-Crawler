@@ -105,7 +105,7 @@ float Pathfinding::calculateManhattan(int x1, int y1, int x2, int y2)
     // and the absolute vertical difference (ignoring whether up or down) then adds them together
     float dx = std::abs(x1 - x2);
     float dy = std::abs(y1 - y2);
-    return dx + dy + (dx * 0.001f); // Multiplies by an arbitrary value, this helps break ties by skewing towards y-axis
+    return dx + dy + (x1 * 0.0001f) + (y1 * 0.00001f); // Addition of miniscule values to help break ties
 }
 
 // Reconstructs the path from goal back to the starting position
