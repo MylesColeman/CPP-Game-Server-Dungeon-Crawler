@@ -24,6 +24,11 @@ class GameMessage
     public:
         virtual ~GameMessage() = default; // Virtual destructor for proper cleanup of derived classes
         GameMessageType type;
+
+        static constexpr const char* SECRET_KEY = "MAM_DungeonCrawler"; // Key used for XOR encryption
+
+        // Applies a xor encryption key to messages
+        static void applyXor(std::vector<uint8_t>& buffer);
 };
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------

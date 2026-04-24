@@ -278,6 +278,8 @@ void GameServer::simulationLoop()
 
                 std::vector<uint8_t> bytes = worldMsg.serialise();
 
+                GameMessage::applyXor(bytes); // Encrypts the message
+
                 broadcastMessage(bytes, nullptr); // Sends the message to everyone, hence nullptr sender ID
             }
 
@@ -356,6 +358,8 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
             // Checks a message is received, and its the expected size
             if (status == sf::Socket::Done && received == remainingSize) 
             {
+                GameMessage::applyXor(fullPacket); // Decrypts the message
+
                 // Only rate limits action messages
                 if (type == GameMessageType::PLAYER_MOVE || type == GameMessageType::PLAYER_ATTACK)
                 {
@@ -399,6 +403,8 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
                                 {
                                     m_entityStates[move->id].position = sf::Vector2f(move->posX, move->posY);
                                     std::cout << "Initial sync: Player " << move->id << " teleported to " << move->posX << ", " << move->posY << std::endl;
+
+                                    GameMessage::applyXor(fullPacket); // Encrypts the message
 
                                     broadcastMessage(fullPacket, client);
                                     continue;
@@ -480,6 +486,7 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
                         }
                         std::cout << "Server received Map Data: " << mapMsg->width << "x" << mapMsg->height << std::endl;
                     }
+                    GameMessage::applyXor(fullPacket); // Encrypts the message
 
                     broadcastMessage(fullPacket, client); // Sends the message to all OTHER clients
                 }
@@ -579,7 +586,11 @@ void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
             liveEntity->second.health -= 1;
 
             EntityDamagedMessage dmgMsg(targetId, liveEntity->second.health);
-            broadcastMessage(dmgMsg.serialise(), nullptr); // Broadcasts the message to all connected clients, so everyone's UI updates
+            std::vector<uint8_t> dmgBytes = dmgMsg.serialise();
+
+            GameMessage::applyXor(dmgBytes); // Encrypts the message
+
+            broadcastMessage(dmgBytes, nullptr); // Broadcasts the message to all connected clients, so everyone's UI updates
 
             std::cout << "HIT! Player " << targetId << " was in range at tick " << historicalTick << std::endl;
         }   

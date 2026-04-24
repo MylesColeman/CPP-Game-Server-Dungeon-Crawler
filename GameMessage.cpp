@@ -4,6 +4,16 @@
 
 #include "GameServer.h"
 
+// Applies a xor encryption key to messages
+void GameMessage::applyXor(std::vector<uint8_t>& buffer) 
+{
+    if (buffer.size() <= 1) return; // Don't encrypt single byte messages so the type ID can be processed
+    size_t keyLen = std::strlen(SECRET_KEY);
+    // Skip the message type ID so it can be read
+    for (size_t i = 1; i < buffer.size(); ++i)
+        buffer[i] ^= SECRET_KEY[(i - 1)% keyLen];
+}
+
 // -----------------------------------------------------------------------------------------------------------------------
 // Serialise function converts messages to a vector of bytes (technically ints of 8 bit size) to be sent to clients
 // First byte is the message ID used to identify the message
