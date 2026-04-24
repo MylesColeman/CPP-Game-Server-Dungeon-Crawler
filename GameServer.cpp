@@ -246,10 +246,7 @@ void GameServer::simulationLoop()
                             if (std::abs(dx) > std::abs(dy)) 
                                 state.position = sf::Vector2f(target.x + (dx > 0 ? 1.0f : -1.0f), target.y);
                             else 
-                                state.position = sf::Vector2f(target.x, target.y + (dy > 0 ? 1.0f : -1.0f));       
-
-                            state.currentPath.clear();
-                            state.isMoving = false;
+                                state.position = sf::Vector2f(target.x, target.y + (dy > 0 ? 1.0f : -1.0f));
                         }
                         else // Current path is fine
                         {
