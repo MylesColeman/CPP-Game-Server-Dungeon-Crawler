@@ -418,13 +418,25 @@ void GameServer::handleClient(std::shared_ptr<sf::TcpSocket> client, int32_t cli
                                     // Check to ensure client isn't marked as an obstacle for themself, and dead player's aren't avoided
                                     if (pair.first != move->id && pair.second.health > 0)
                                     {
-                                        // Snaps to int coords
+                                        // Snaps player coords to ints
                                         int px = static_cast<int>(pair.second.position.x);
                                         int py = static_cast<int>(pair.second.position.y);
 
                                         // Safety check to ensure coords are within map boundaries
                                         if (px >= 0 && px < mapCopy.width && py >= 0 && py < mapCopy.height)
                                             mapCopy.collision[py * mapCopy.width + px] = true;
+                                        
+                                        // Checks if the player is moving and if so marks their target as an obstacle
+                                        if (pair.second.isMoving && !pair.second.currentPath.empty()) 
+                                        {
+                                            // Snaps target coords to ints
+                                            int tx = static_cast<int>(pair.second.currentPath.front().x);
+                                            int ty = static_cast<int>(pair.second.currentPath.front().y);
+                                            
+                                            // Safety check to ensure coords are within map boundaries
+                                            if (tx >= 0 && tx < mapCopy.width && ty >= 0 && ty < mapCopy.height)
+                                                mapCopy.collision[ty * mapCopy.width + tx] = true;
+                                        }
                                     }
                                 }
                             }
