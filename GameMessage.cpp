@@ -56,12 +56,35 @@ std::vector<uint8_t> EntityDamagedMessage::serialise() const
 {
     std::vector<uint8_t> buffer(9); 
 
-    buffer[0] = static_cast<uint8_t>(type); // Adds the message type id to the buffer
+    buffer[0] = static_cast<uint8_t>(type);
 
-    // Adds the ID and the health to the packet
     std::memcpy(&buffer[1], &targetId, 4);
     std::memcpy(&buffer[5], &currentHealth, 4);
 
+    return buffer;
+}
+
+std::vector<uint8_t> MapTransitionMessage::serialise() const
+{
+    std::vector<uint8_t> buffer(5);
+
+    buffer[0] = static_cast<uint8_t>(type);
+
+    std::memcpy(&buffer[1], &mapId, 4);
+
+    return buffer;
+}
+
+std::vector<uint8_t> ButtonStateMessage::serialise() const
+{
+    std::vector<uint8_t> buffer(10);
+
+    buffer[0] = static_cast<uint8_t>(type);
+
+    std::memcpy(&buffer[1], &x, 4);
+    std::memcpy(&buffer[5], &y, 4);
+    buffer[9] = isPressed ? 1 : 0;
+    
     return buffer;
 }
 
@@ -95,7 +118,7 @@ std::unique_ptr<GameMessage> GameMessageFactory::create(const std::vector<uint8_
         return std::make_unique<PlayerAttackMessage>(id, tick);
     }
 
-    if (type == GameMessageType::MAP_DATA && bytes.size() >= 1 +GameServer::MAP_DATA_SIZE)
+    if (type == GameMessageType::MAP_DATA && bytes.size() >= 1 + GameServer::MAP_DATA_SIZE)
     {
         std::vector<uint8_t> grid(GameServer::MAP_DATA_SIZE);
         std::memcpy(grid.data(), &bytes[1], GameServer::MAP_DATA_SIZE);

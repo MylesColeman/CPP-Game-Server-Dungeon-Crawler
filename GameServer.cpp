@@ -6,6 +6,7 @@
 #include <thread>
 #include <cmath>
 #include <chrono>
+#include <random>
 
 #include "GameMessage.h"
 #include "Pathfinding.h"
@@ -265,6 +266,90 @@ void GameServer::simulationLoop()
                 }
             }
 
+            // Lobby button logic
+            if (m_lobbyActive && m_entityStates.size() >= 2)
+            {
+                // If door is closed, check if it should be open. If door is open, check if player is trying to leave
+                if (!m_doorOpen)
+                {
+                    bool b1Now = false;
+                    bool b2Now = false;
+
+                    // Check if any entity is stood on a button
+                    for (auto const& pair : m_entityStates)
+                    {
+                        sf::Vector2f pos = pair.second.position;
+
+                        // Button One (2.5, 5.5)
+                        float dx1 = pos.x - 2.5f;
+                        float dy1 = pos.y - 5.5f;
+                        // If within threshold button is being stood on
+                        if ((dx1 * dx1 + dy1 * dy1) < 0.5f)
+                            b1Now = true;
+
+                        // Button Two (16.5, 5.5)
+                        float dx2 = pos.x - 16.5f;
+                        float dy2 = pos.y - 5.5f;
+                        // If within threshold button is being stood on
+                        if ((dx2 * dx2 + dy2 * dy2) < 0.5f)
+                            b2Now = true;
+                    }
+
+                    // Buttons have changed state, update them locally and for the clients
+                    if (b1Now != m_button1Pressed)
+                    {
+                        m_button1Pressed = b1Now;
+                        std::vector<uint8_t> msg = ButtonStateMessage(2, 5, b1Now).serialise();
+                        GameMessage::applyXor(msg);
+                        broadcastMessage(msg, nullptr);
+                    }
+
+                    if (b2Now != m_button2Pressed)
+                    {
+                        m_button2Pressed = b2Now;
+                        std::vector<uint8_t> msg = ButtonStateMessage(16, 5, b2Now).serialise();
+                        GameMessage::applyXor(msg);
+                        broadcastMessage(msg, nullptr);
+                    }
+
+                    // Both buttons pressed - open the door
+                    if (m_button1Pressed && m_button2Pressed)
+                    {
+                        m_doorOpen = true;
+
+                        // Removes the collision for the door, so it can be entered
+                        if (!m_currentMap.collision.empty() && m_currentMap.width > 16)
+                            m_currentMap.collision[0 * MAP_WIDTH + 16] = false; 
+
+                        std::cout << "Lobby doors opened! Collision removed." << std::endl;
+                    }
+                }
+                else
+                {
+                    // Checks if any entity is colliding with the door
+                    for (auto const& pair : m_entityStates)
+                    {
+                        sf::Vector2f pos = pair.second.position;
+                        float dx = pos.x - 16.5f;
+                        float dy = pos.y - 0.5f;
+
+                        // If within threshold door is being entered
+                        if ((dx * dx + dy * dy) < 0.5f)
+                        {
+                            m_lobbyActive = false; // No longer checking for buttons
+                            int nextMap = generateRandomId();
+
+                            std::cout << "Player entered door! Transitioning to map " << nextMap << std::endl;
+
+                            std::vector<uint8_t> msg = MapTransitionMessage(nextMap).serialise();
+                            GameMessage::applyXor(msg);
+                            broadcastMessage(msg, nullptr);
+                            break;
+                        }
+                    }
+                }
+            }
+
             // Increments the tick count to check if the elapsed broadcasting time has passed
             if (++tickCount >= BROADCAST_INTERVAL)
             {
@@ -308,6 +393,15 @@ void GameServer::simulationLoop()
         if (elapsed < tickDuration) 
             std::this_thread::sleep_for(tickDuration - elapsed);
     }
+}
+
+//
+int GameServer::generateRandomId()
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distrib(1, 5); // Rooms one through five
+    return distrib(gen);
 }
 
 // Runs in its own thread for each client, responsible for receiving messages from said client and processing them

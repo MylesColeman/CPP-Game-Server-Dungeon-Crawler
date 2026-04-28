@@ -15,7 +15,9 @@ enum class GameMessageType : uint8_t
     PLAYER_ATTACK = 2,
     MAP_DATA = 3,
     WORLD_STATE = 4,
-    ENTITY_DAMAGED = 5
+    ENTITY_DAMAGED = 5,
+    MAP_TRANSITION = 6,
+    BUTTON_STATE = 7
 };
 
 // Defines game messages
@@ -91,7 +93,7 @@ class WorldStateMessage : public GameMessage
         std::vector<uint8_t> serialise() const;
 };
 
-//Entity Damaged - sends the updated health
+// Entity Damaged - sends the updated health
 class EntityDamagedMessage : public GameMessage
 {
     public:
@@ -101,6 +103,36 @@ class EntityDamagedMessage : public GameMessage
         EntityDamagedMessage(int32_t id, int32_t health) : targetId(id), currentHealth(health)
         {
             type = GameMessageType::ENTITY_DAMAGED;
+        }
+
+        std::vector<uint8_t> serialise() const;
+};
+
+// Map Transition - received to load the correct map
+class MapTransitionMessage : public GameMessage
+{
+    public:
+        int32_t mapId; // Map to be loaded
+
+        MapTransitionMessage(int32_t id) : mapId(id)
+        {
+            type = GameMessageType::MAP_TRANSITION;
+        }
+
+        std::vector<uint8_t> serialise() const;
+
+};
+
+// Button State - received when a button is pressed
+class ButtonStateMessage : public GameMessage
+{
+    public:
+        int32_t x, y; // Button coords to be updated
+        bool isPressed;
+
+        ButtonStateMessage(int32_t x, int32_t y, bool pressed) : x(x), y(y), isPressed(pressed)
+        {
+            type = GameMessageType::BUTTON_STATE;
         }
 
         std::vector<uint8_t> serialise() const;

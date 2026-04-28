@@ -95,7 +95,13 @@ private:
 	uint32_t m_currentTick = 0; // Current tick count, incremented each simulation loop iteration
 	std::deque<WorldSnapshot> m_history; // History of world snapshots for the last MAX_HISTORY_TICKS ticks, used for client reconciliation and lag compensation
     
+    // Map
 	MapGrid m_currentMap; // Current map data, including dimensions and collision grid, which is updated when the server receives new map data from clients
+    bool m_lobbyActive = true;
+    bool m_doorOpen = false;
+    bool m_button1Pressed = false;
+    bool m_button2Pressed = false;
+    int generateRandomId(); 
 
 	// Entity Management
 	int32_t m_nextId = 0; // Counter for assigning unique IDs to all entities
