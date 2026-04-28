@@ -319,7 +319,7 @@ void GameServer::simulationLoop()
 
                         // Removes the collision for the door, so it can be entered
                         if (!m_currentMap.collision.empty() && m_currentMap.width > 16)
-                            m_currentMap.collision[0 * MAP_WIDTH + 16] = false; 
+                            m_currentMap.collision[10 * MAP_WIDTH + 16] = false; 
 
                         std::cout << "Lobby doors opened! Collision removed." << std::endl;
                     }
@@ -331,7 +331,7 @@ void GameServer::simulationLoop()
                     {
                         sf::Vector2f pos = pair.second.position;
                         float dx = pos.x - 16.5f;
-                        float dy = pos.y - 0.5f;
+                        float dy = pos.y - 10.5f;
 
                         // If within threshold door is being entered
                         if ((dx * dx + dy * dy) < 0.5f)
