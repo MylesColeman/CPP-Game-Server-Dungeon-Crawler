@@ -344,6 +344,14 @@ void GameServer::simulationLoop()
                             std::vector<uint8_t> msg = MapTransitionMessage(nextMap).serialise();
                             GameMessage::applyXor(msg);
                             broadcastMessage(msg, nullptr);
+
+                            // Resets player position, so they can be teleported to the new rooms spawn point
+                            for (auto& entityPair : m_entityStates) 
+                            {
+                                entityPair.second.position = sf::Vector2f(-10.f, -10.f);
+                                entityPair.second.currentPath.clear();
+                                entityPair.second.isMoving = false;
+                            }
                             break;
                         }
                     }
