@@ -407,7 +407,7 @@ void GameServer::simulationLoop()
     }
 }
 
-//
+// Generates a random room ID, ignoring the lobby
 int GameServer::generateRandomId()
 {
     std::random_device rd;
