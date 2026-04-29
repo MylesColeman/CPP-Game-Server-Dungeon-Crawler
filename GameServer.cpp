@@ -307,7 +307,7 @@ void GameServer::simulationLoop()
             }
 
             // Lobby button logic
-            if (m_entityStates.size() >= 2 && m_lobbyActive)
+            if (m_lobbyActive)
             {
                 bool b1Now = false;
                 bool b2Now = false;
