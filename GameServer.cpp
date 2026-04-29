@@ -351,6 +351,9 @@ void GameServer::simulationLoop()
                                 entityPair.second.position = sf::Vector2f(-10.f, -10.f);
                                 entityPair.second.currentPath.clear();
                                 entityPair.second.isMoving = false;
+                                
+                                if (entityPair.second.health <= 0)
+                                    entityPair.second.health = 3;
                             }
                             break;
                         }
@@ -671,7 +674,7 @@ void GameServer::processAttack(int32_t attackerId, uint32_t historicalTick)
 
         auto liveEntity = m_entityStates.find(targetId);
         // Checks that the entity is valid and not another player; friendly fire is disabled
-        if (liveEntity == m_entityStates.end() /*|| liveEntity->second.type == EntityType::PLAYER*/) // Friendly fire enabled for demonstration of health system
+        if (liveEntity == m_entityStates.end() || liveEntity->second.health <= 0 /*|| liveEntity->second.type == EntityType::PLAYER*/) // Friendly fire enabled for demonstration of health system
             continue;
 
         sf::Vector2f targetPos = pair.second;
