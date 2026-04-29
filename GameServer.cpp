@@ -266,98 +266,99 @@ void GameServer::simulationLoop()
                 }
             }
 
-            // Lobby button logic
-            if (m_lobbyActive && m_entityStates.size() >= 2)
+            // Door/room transition logic
+            if (m_entityStates.size() >= 2)
             {
-                // If door is closed, check if it should be open. If door is open, check if player is trying to leave
-                if (!m_doorOpen)
+                bool playerEnteredDoor = false;
+                for (auto const& pair : m_entityStates)
                 {
-                    bool b1Now = false;
-                    bool b2Now = false;
-
-                    // Check if any entity is stood on a button
-                    for (auto const& pair : m_entityStates)
+                    // All doors are on the northern wall
+                    if (pair.second.position.y >= 10.5f)
                     {
-                        sf::Vector2f pos = pair.second.position;
-
-                        // Button One (2.5, 5.5)
-                        float dx1 = pos.x - 2.5f;
-                        float dy1 = pos.y - 5.5f;
-                        // If within threshold button is being stood on
-                        if ((dx1 * dx1 + dy1 * dy1) < 0.5f)
-                            b1Now = true;
-
-                        // Button Two (16.5, 5.5)
-                        float dx2 = pos.x - 16.5f;
-                        float dy2 = pos.y - 5.5f;
-                        // If within threshold button is being stood on
-                        if ((dx2 * dx2 + dy2 * dy2) < 0.5f)
-                            b2Now = true;
-                    }
-
-                    // Buttons have changed state, update them locally and for the clients
-                    if (b1Now != m_button1Pressed)
-                    {
-                        m_button1Pressed = b1Now;
-                        std::vector<uint8_t> msg = ButtonStateMessage(2, 5, b1Now).serialise();
-                        GameMessage::applyXor(msg); // Encrypts the message
-                        broadcastMessage(msg, nullptr);
-                    }
-
-                    if (b2Now != m_button2Pressed)
-                    {
-                        m_button2Pressed = b2Now;
-                        std::vector<uint8_t> msg = ButtonStateMessage(16, 5, b2Now).serialise();
-                        GameMessage::applyXor(msg); // Encrypts the message
-                        broadcastMessage(msg, nullptr);
-                    }
-
-                    // Both buttons pressed - open the door
-                    if (m_button1Pressed && m_button2Pressed)
-                    {
-                        m_doorOpen = true;
-
-                        // Removes the collision for the door, so it can be entered
-                        if (!m_currentMap.collision.empty() && m_currentMap.width > 16)
-                            m_currentMap.collision[10 * MAP_WIDTH + 16] = false; 
-
-                        std::cout << "Lobby doors opened! Collision removed." << std::endl;
+                        playerEnteredDoor = true;
+                        break;
                     }
                 }
-                else
+
+                // Door entered, load a random room and reset the player ready for it
+                if (playerEnteredDoor)
                 {
-                    // Checks if any entity is colliding with the door
-                    for (auto const& pair : m_entityStates)
+                    m_lobbyActive = false;
+                    int nextMap = generateRandomId();
+
+                    std::cout << "Player entered door! Transitioning to map " << nextMap << std::endl;
+
+                    std::vector<uint8_t> msg = MapTransitionMessage(nextMap).serialise();
+                    GameMessage::applyXor(msg); // Encrypts the message
+                    broadcastMessage(msg, nullptr);
+
+                    // Resets player position, so they can be teleported to the new rooms spawn point
+                    for (auto& entityPair : m_entityStates) 
                     {
-                        sf::Vector2f pos = pair.second.position;
-                        float dx = pos.x - 16.5f;
-                        float dy = pos.y - 10.5f;
-
-                        // If within threshold door is being entered
-                        if ((dx * dx + dy * dy) < 0.5f)
-                        {
-                            m_lobbyActive = false; // No longer checking for buttons
-                            int nextMap = generateRandomId();
-
-                            std::cout << "Player entered door! Transitioning to map " << nextMap << std::endl;
-
-                            std::vector<uint8_t> msg = MapTransitionMessage(nextMap).serialise();
-                            GameMessage::applyXor(msg); // Encrypts the message
-                            broadcastMessage(msg, nullptr);
-
-                            // Resets player position, so they can be teleported to the new rooms spawn point
-                            for (auto& entityPair : m_entityStates) 
-                            {
-                                entityPair.second.position = sf::Vector2f(-10.f, -10.f);
-                                entityPair.second.currentPath.clear();
-                                entityPair.second.isMoving = false;
+                        entityPair.second.position = sf::Vector2f(-10.f, -10.f);
+                        entityPair.second.currentPath.clear();
+                        entityPair.second.isMoving = false;
                                 
-                                if (entityPair.second.health <= 0)
-                                    entityPair.second.health = 3;
-                            }
-                            break;
-                        }
+                        // Resets player health on new room load, respawn
+                        if (entityPair.second.health <= 0)
+                            entityPair.second.health = 3;
                     }
+                }
+            }
+
+            // Lobby button logic
+            if (m_entityStates.size() >= 2 && m_lobbyActive)
+            {
+                bool b1Now = false;
+                bool b2Now = false;
+
+                // Check if any entity is stood on a button
+                for (auto const& pair : m_entityStates)
+                {
+                    sf::Vector2f pos = pair.second.position;
+
+                    // Button One (2.5, 5.5)
+                    float dx1 = pos.x - 2.5f;
+                    float dy1 = pos.y - 5.5f;
+                    // If within threshold button is being stood on
+                    if ((dx1 * dx1 + dy1 * dy1) < 0.5f)
+                        b1Now = true;
+
+                    // Button Two (16.5, 5.5)
+                    float dx2 = pos.x - 16.5f;
+                    float dy2 = pos.y - 5.5f;
+                    // If within threshold button is being stood on
+                    if ((dx2 * dx2 + dy2 * dy2) < 0.5f)
+                        b2Now = true;
+                }
+
+                // Buttons have changed state, update them locally and for the clients
+                if (b1Now != m_button1Pressed)
+                {
+                    m_button1Pressed = b1Now;
+                    std::vector<uint8_t> msg = ButtonStateMessage(2, 5, b1Now).serialise();
+                    GameMessage::applyXor(msg); // Encrypts the message
+                    broadcastMessage(msg, nullptr);
+                }
+
+                if (b2Now != m_button2Pressed)
+                {
+                    m_button2Pressed = b2Now;
+                    std::vector<uint8_t> msg = ButtonStateMessage(16, 5, b2Now).serialise();
+                    GameMessage::applyXor(msg); // Encrypts the message
+                    broadcastMessage(msg, nullptr);
+                }
+
+                // Both buttons pressed - open the door
+                if (m_button1Pressed && m_button2Pressed && !m_doorOpen)
+                {
+                    m_doorOpen = true;
+
+                    // Removes the collision for the door, so it can be entered
+                    if (!m_currentMap.collision.empty() && m_currentMap.width > 16)
+                        m_currentMap.collision[10 * MAP_WIDTH + 16] = false; 
+
+                    std::cout << "Lobby doors opened! Collision removed." << std::endl;
                 }
             }
 
