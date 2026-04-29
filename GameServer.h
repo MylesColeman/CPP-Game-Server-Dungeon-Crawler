@@ -60,7 +60,7 @@ public:
 	// Simulation and Broadcast Settings
     static constexpr float DELTA_TIME = 1.0f / 60.0f;
     static constexpr float TICK_RATE_MS = 16.0f;
-    static constexpr int BROADCAST_INTERVAL = 6;
+    static constexpr int BROADCAST_INTERVAL = 16; // How many ticks before a client sync
     static constexpr size_t MAX_HISTORY_TICKS = 30;
     static constexpr float NETWORK_RATE_LIMIT = 0.05f; // One message every 5ms
 
