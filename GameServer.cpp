@@ -300,7 +300,7 @@ void GameServer::simulationLoop()
                     {
                         m_button1Pressed = b1Now;
                         std::vector<uint8_t> msg = ButtonStateMessage(2, 5, b1Now).serialise();
-                        GameMessage::applyXor(msg);
+                        GameMessage::applyXor(msg); // Encrypts the message
                         broadcastMessage(msg, nullptr);
                     }
 
@@ -308,7 +308,7 @@ void GameServer::simulationLoop()
                     {
                         m_button2Pressed = b2Now;
                         std::vector<uint8_t> msg = ButtonStateMessage(16, 5, b2Now).serialise();
-                        GameMessage::applyXor(msg);
+                        GameMessage::applyXor(msg); // Encrypts the message
                         broadcastMessage(msg, nullptr);
                     }
 
@@ -342,7 +342,7 @@ void GameServer::simulationLoop()
                             std::cout << "Player entered door! Transitioning to map " << nextMap << std::endl;
 
                             std::vector<uint8_t> msg = MapTransitionMessage(nextMap).serialise();
-                            GameMessage::applyXor(msg);
+                            GameMessage::applyXor(msg); // Encrypts the message
                             broadcastMessage(msg, nullptr);
 
                             // Resets player position, so they can be teleported to the new rooms spawn point
