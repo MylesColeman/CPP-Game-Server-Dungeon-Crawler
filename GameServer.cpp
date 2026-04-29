@@ -273,7 +273,7 @@ void GameServer::simulationLoop()
                 for (auto const& pair : m_entityStates)
                 {
                     // All doors are on the northern wall
-                    if (pair.second.position.y >= 10.5f)
+                    if (pair.second.position.y >= 10.f)
                     {
                         playerEnteredDoor = true;
                         break;
